@@ -111,6 +111,14 @@ SUPPLIER_ALIASES, TAX_ID_SUPPLIER_MAP = _load_supplier_mappings()
 
 # ── Utilidades ───────────────────────────────────────────────────────────────
 
+LOG_CALLBACK = None
+
+def set_log_callback(cb) -> None:
+    """Registra una función callback para recibir mensajes de log en tiempo real."""
+    global LOG_CALLBACK
+    LOG_CALLBACK = cb
+
+
 def log(msg: str, level: str = "INFO") -> None:
     """Imprime un mensaje con timestamp (seguro para consolas Windows)."""
     ts = datetime.now().strftime("%H:%M:%S")
@@ -1265,7 +1273,7 @@ def process_invoice(
             # 2a. Validar con Gemini (anti-falsos positivos)
             info = validate_is_invoice(gemini_client, filepath, sender_email=sender, reference_fps=reference_fps)
             if info is None:
-                log(f"  Adjunto no es factura, saltando...")
+                log(f"  [DESCARTADA] 🚫 Documento '{os.path.basename(filepath)}' de {sender} no es factura válida o falta CIF -> Disponible en 'Descartadas' para revisar o rescatar.", "INFO")
                 try:
                     import data_manager
                     data_manager.add_history_entry(
@@ -1316,6 +1324,13 @@ def process_invoice(
             # 2d. Subir archivo
             drive_file_id = upload_to_drive(drive_service, filepath, supplier_folder_id)
             is_ambiguous = info.get("is_ambiguous", False)
+            folder_path_str = f"{year_folder} / {month_folder_name} / {supplier_name}"
+            
+            if is_ambiguous:
+                log(f"  [DUDOSA] ⚠️ Factura '{os.path.basename(filepath)}' de {supplier_name} con fecha ambigua -> Guardada provisionalmente en '{folder_path_str}' y añadida a 'Facturas Dudosas'.", "WARN")
+            else:
+                log(f"  [SUCCESS] [DRIVE] ✅ Factura archivada con éxito: '{os.path.basename(filepath)}' de {supplier_name} -> Carpeta: {folder_path_str}", "SUCCESS")
+
             try:
                 import data_manager
                 status_to_record = "AMBIGUOUS_DATE" if is_ambiguous else "SUCCESS"
@@ -1326,7 +1341,7 @@ def process_invoice(
                     date_str=date_str,
                     drive_file_id=drive_file_id,
                     drive_folder_id=supplier_folder_id,
-                    drive_folder_path=f"{year_folder}/{month_folder_name}/{supplier_name}",
+                    drive_folder_path=folder_path_str,
                     original_filepath=filepath,
                     email_subject=subject,
                     sender=sender,

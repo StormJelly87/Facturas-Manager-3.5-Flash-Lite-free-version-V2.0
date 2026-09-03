@@ -4,7 +4,8 @@ pipeline_orchestrator.py — Conector asíncrono y monitor en tiempo real del ge
 Permite:
 1. Ejecutar el pipeline de procesamiento (Gmail + EnvíoMédical) en un hilo en segundo plano (no bloqueante).
 2. Monitorear el estado (idle, running, success, error) y los pasos en tiempo real.
-3. Capturar logs para mostrarlos dinámicamente en el dashboard.
+3. Capturar logs detallados de invoice_manager para mostrarlos dinámicamente en el dashboard.
+4. Generar un resumen exacto de los documentos procesados en la última ejecución (proveedor, carpeta Drive, estado).
 """
 
 import threading
@@ -25,6 +26,7 @@ _STATE = {
     "last_error": None,
     "processed_count": 0,
     "logs": [],
+    "session_summary": [],        # Documentos procesados en la sesión más reciente
 }
 _LOCK = threading.Lock()
 _ACTIVE_THREAD = None
@@ -43,18 +45,26 @@ def _append_log(msg: str, level: str = "INFO") -> None:
     line = f"[{ts}] [{level}] {msg}"
     with _LOCK:
         _STATE["logs"].append(line)
-        if len(_STATE["logs"]) > 200:
-            _STATE["logs"] = _STATE["logs"][-200:]
+        if len(_STATE["logs"]) > 250:
+            _STATE["logs"] = _STATE["logs"][-250:]
         _STATE["current_step"] = msg
 
 
 def _execute_pipeline_worker() -> None:
     """Hilo trabajador que ejecuta invoice_manager.py de principio a fin."""
     global _STATE
+
+    # Conectar el callback de logs de invoice_manager
+    invoice_manager.set_log_callback(_append_log)
+
+    # Identificar entradas previas para detectar exactamente las nuevas de esta sesión
+    initial_ids = {e["id"] for e in data_manager.get_history(limit=500)}
+
     with _LOCK:
         _STATE["status"] = "running"
         _STATE["last_error"] = None
         _STATE["processed_count"] = 0
+        _STATE["session_summary"] = []
 
     _append_log("Iniciando ciclo de procesamiento...", "INFO")
 
@@ -90,7 +100,7 @@ def _execute_pipeline_worker() -> None:
             # ── FASE 1: Gmail ──
             _append_log("Buscando correos no leídos con facturas...", "INFO")
             uids = invoice_manager.search_invoice_emails(mail)
-            _append_log(f"Se encontraron {len(uids)} correo(s) para procesar.", "INFO")
+            _append_log(f"Se encontraron {len(uids)} correo(s) no leídos para procesar.", "INFO")
 
             for i, uid in enumerate(uids, 1):
                 _append_log(f"Procesando correo {i} de {len(uids)}...", "INFO")
@@ -111,11 +121,22 @@ def _execute_pipeline_worker() -> None:
             except Exception as e:
                 _append_log(f"Error en EnvíoMédical: {e}", "WARN")
 
-        _append_log("Proceso completado con éxito.", "SUCCESS")
+        # 4. Calcular resumen de la sesión
+        current_entries = data_manager.get_history(limit=500)
+        new_entries = [e for e in current_entries if e["id"] not in initial_ids]
+
+        ok_count = sum(1 for e in new_entries if e.get("status") == "SUCCESS")
+        amb_count = sum(1 for e in new_entries if e.get("status") == "AMBIGUOUS_DATE")
+        disc_count = sum(1 for e in new_entries if e.get("status") == "DISCARDED")
+
+        summary_line = f"Fin de ciclo: {ok_count} facturas archivadas en Drive, {amb_count} dudosas, {disc_count} descartadas."
+        _append_log(summary_line, "SUCCESS" if ok_count > 0 else "INFO")
+
         with _LOCK:
             _STATE["status"] = "success"
             _STATE["current_step"] = "Completado con éxito"
             _STATE["last_run"] = datetime.now().isoformat(timespec="seconds")
+            _STATE["session_summary"] = new_entries
 
     except Exception as e:
         err_msg = str(e)

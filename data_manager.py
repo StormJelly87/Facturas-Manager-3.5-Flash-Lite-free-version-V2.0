@@ -141,6 +141,14 @@ def update_history_entry(entry_id: str, updates: dict) -> bool:
     return updated
 
 
+def discard_history_entry(entry_id: str, reason: str = "Descartado manualmente por el usuario") -> bool:
+    """Cambia el estado de una entrada (por ejemplo dudosa) a DISCARDED."""
+    return update_history_entry(entry_id, {
+        "status": "DISCARDED",
+        "reason": reason,
+    })
+
+
 def get_quarantine_path(entry_id: str) -> str | None:
     """Devuelve la ruta absoluta del archivo en cuarentena si existe."""
     entry = get_history_entry(entry_id)
@@ -176,13 +184,16 @@ def load_vendor_rules() -> dict:
 
 def save_vendor_rule(
     supplier_name: str,
-    date_format: str | None = None,       # "DD/MM/YYYY" o "MM/DD/YYYY"
-    always_accept: bool | None = None,     # Forzar aceptación
+    date_format: str | None = None,            # "DD/MM/YYYY" o "MM/DD/YYYY"
+    always_accept: bool | None = None,          # Forzar aceptación
     trusted_senders: list[str] | None = None,
     tax_id: str | None = None,
     notes: str | None = None,
+    learned_from: str | None = None,            # "resolucion_ambiguedad" o "rescate_manual"
+    origin_document: str | None = None,         # ej: "factura_123.pdf"
+    user_reason: str | None = None,             # Motivo explícito escrito por el usuario
 ) -> dict:
-    """Guarda o actualiza una regla aprendida para un proveedor."""
+    """Guarda o actualiza una regla aprendida para un proveedor con explicación detallada."""
     data = load_vendor_rules()
     key = _normalize_key(supplier_name)
     if not key:
@@ -195,6 +206,10 @@ def save_vendor_rule(
         "trusted_senders": [],
         "tax_id": "",
         "notes": "",
+        "learned_from": "configuracion",
+        "origin_document": "",
+        "user_reason": "",
+        "human_explanation": "",
         "created_at": datetime.now().isoformat(timespec="seconds"),
     })
 
@@ -208,7 +223,25 @@ def save_vendor_rule(
         rule["tax_id"] = tax_id.strip().upper()
     if notes is not None:
         rule["notes"] = notes
+    if learned_from:
+        rule["learned_from"] = learned_from
+    if origin_document:
+        rule["origin_document"] = origin_document
+    if user_reason is not None:
+        rule["user_reason"] = user_reason
 
+    # Construir explicación humana detallada del porqué y qué hace el sistema
+    reasons = []
+    if rule.get("learned_from") == "resolucion_ambiguedad":
+        reasons.append(f"Aprendida al resolver una fecha ambigua en el documento '{rule.get('origin_document') or 'factura'}'. Confirmaste que el proveedor emite en formato {rule.get('date_format', 'DD/MM/YYYY')}.")
+    elif rule.get("learned_from") == "rescate_manual":
+        doc_str = f" en '{rule.get('origin_document')}'" if rule.get("origin_document") else ""
+        reason_str = f" Motivo indicado: \"{rule.get('user_reason')}\"." if rule.get("user_reason") else ""
+        reasons.append(f"Aprendida tras rescatar manualmente una factura descartada{doc_str}.{reason_str} A partir de ahora el sistema forzará su aceptación.")
+    elif rule.get("notes"):
+        reasons.append(rule["notes"])
+
+    rule["human_explanation"] = " ".join(reasons)
     rule["updated_at"] = datetime.now().isoformat(timespec="seconds")
     data["rules"][key] = rule
 

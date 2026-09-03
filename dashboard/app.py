@@ -117,6 +117,7 @@ class RescueRequest(BaseModel):
     supplier: str
     date: str  # YYYY-MM-DD o MM-YY
     always_accept: bool = True
+    reason_notes: Optional[str] = ""
 
 
 @app.post("/api/rescue/{item_id}")
@@ -156,13 +157,16 @@ def rescue_invoice(item_id: str, req: RescueRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al subir a Google Drive: {e}")
 
-    # Memorizar regla aprendida en vendor_rules.json
+    # Memorizar regla aprendida en vendor_rules.json con motivo detallado
     if req.always_accept:
         data_manager.save_vendor_rule(
             supplier_name,
             always_accept=True,
             trusted_senders=[entry.get("sender")] if entry.get("sender") else None,
-            notes="Rescatado manualmente desde el dashboard",
+            notes=req.reason_notes or "Rescatado manualmente desde el dashboard",
+            learned_from="rescate_manual",
+            origin_document=entry.get("filename"),
+            user_reason=req.reason_notes or "",
         )
 
     # Actualizar historial a éxito
@@ -172,8 +176,8 @@ def rescue_invoice(item_id: str, req: RescueRequest):
         "date_str": month_folder,
         "drive_file_id": uploaded_id,
         "drive_folder_id": supplier_id,
-        "drive_folder_path": f"{year_folder}/{month_folder}/{supplier_name}",
-        "reason": "Rescatada manualmente por el usuario",
+        "drive_folder_path": f"{year_folder} / {month_folder} / {supplier_name}",
+        "reason": f"Rescatada manualmente por el usuario. {req.reason_notes}".strip(),
     })
 
     return {
@@ -228,10 +232,12 @@ def resolve_ambiguity(item_id: str, req: AmbiguityResolutionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en Google Drive: {e}")
 
-    # Guardar regla en vendor_rules.json
+    # Guardar regla en vendor_rules.json con origen y explicación detallada
     data_manager.save_vendor_rule(
         supplier_name,
         date_format=req.format,
+        learned_from="resolucion_ambiguedad",
+        origin_document=entry.get("filename"),
         notes=f"Formato confirmado: día={req.day}, mes={req.month}, año={req.year}",
     )
 
@@ -240,7 +246,7 @@ def resolve_ambiguity(item_id: str, req: AmbiguityResolutionRequest):
         "status": "SUCCESS",
         "date_str": month_folder,
         "drive_folder_id": new_supplier_id,
-        "drive_folder_path": f"{year_folder}/{month_folder}/{supplier_name}",
+        "drive_folder_path": f"{year_folder} / {month_folder} / {supplier_name}",
         "reason": f"Fecha confirmada ({req.day:02d}/{req.month:02d}/{req.year}) - Formato {req.format}",
     })
 
@@ -248,6 +254,19 @@ def resolve_ambiguity(item_id: str, req: AmbiguityResolutionRequest):
         "success": True,
         "message": f"Regla memorizada ({req.format}) y factura archivada en {year_folder}/{month_folder}/{supplier_name}",
     }
+
+
+@app.post("/api/discard_ambiguous/{item_id}")
+def discard_ambiguous(item_id: str):
+    """Descarta un documento en dudosas sin validarlo como factura."""
+    entry = data_manager.get_history_entry(item_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    
+    success = data_manager.discard_history_entry(
+        item_id, reason="Descartado por el usuario desde Facturas Dudosas (no se considera factura válida)"
+    )
+    return {"success": True, "message": "Documento descartado correctamente"}
 
 
 # ── Endpoints de Reglas Memorizadas y Programación ───────────────────────────
