@@ -270,6 +270,7 @@ def discard_ambiguous(item_id: str):
 
 
 @app.delete("/api/discarded/{item_id}")
+@app.post("/api/discarded/{item_id}/dismiss")
 def dismiss_discarded(item_id: str):
     """Confirma el descarte de un documento y lo retira de la lista de revisión activa."""
     entry = data_manager.get_history_entry(item_id)

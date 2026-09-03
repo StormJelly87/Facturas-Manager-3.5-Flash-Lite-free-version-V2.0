@@ -968,12 +968,15 @@
         return;
       }
       try {
-        const res = await fetch(`/api/discarded/${itemId}`, { method: 'DELETE' });
+        let res = await fetch(`/api/discarded/${itemId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          res = await fetch(`/api/discarded/${itemId}/dismiss`, { method: 'POST' });
+        }
         if (res.ok) {
           loadDiscarded();
           pollStatus();
         } else {
-          alert('Error al retirar el documento.');
+          alert('Error al retirar el documento. Asegúrate de que el servidor está actualizado.');
         }
       } catch (e) {
         alert('Fallo de conexión.');
@@ -1124,12 +1127,29 @@
     }
 
     // ── Programador ──────────────────────────────────────────────────────────
+    function formatScheduleSummary(s) {
+      if (!s) return 'Sin programar';
+      if (s.frequency_text) return s.frequency_text;
+      const freq = s.frequency || 'weekly';
+      const h = String(s.hour ?? 9).padStart(2, '0');
+      const m = String(s.minute ?? 0).padStart(2, '0');
+      const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+      if (freq === 'weekly') {
+        return `Semanal: Cada ${dias[s.day_of_week ?? 0]} a las ${h}:${m}`;
+      } else if (freq === 'monthly') {
+        return `Mensual: El día ${s.day_of_month ?? 1} de cada mes a las ${h}:${m}`;
+      } else if (freq === 'daily') {
+        return `Diaria: Todos los días a las ${h}:${m}`;
+      }
+      return 'Sin programar';
+    }
+
     function renderActiveScheduleCard(s) {
       const badge = document.getElementById('activeSchedBadge');
       const freqText = document.getElementById('activeSchedFreqText');
       const lastRunText = document.getElementById('activeSchedLastRunText');
 
-      if (s.enabled) {
+      if (s && s.enabled) {
         badge.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5';
         badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Activa';
       } else {
@@ -1137,8 +1157,8 @@
         badge.textContent = 'Inactiva';
       }
 
-      freqText.textContent = s.frequency_text || 'Sin programar';
-      lastRunText.textContent = s.last_run_text || 'Ninguna todavía';
+      freqText.textContent = formatScheduleSummary(s);
+      lastRunText.textContent = s ? (s.last_run_text || (s.last_run ? s.last_run.replace('T', ' ') : 'Ninguna todavía')) : 'Ninguna todavía';
     }
 
     async function loadSchedule() {
@@ -1172,11 +1192,15 @@
       const hour = parseInt(document.getElementById('schedHour').value);
       const minute = parseInt(document.getElementById('schedMinute').value);
 
+      const localPayload = { enabled, frequency, day_of_week, day_of_month, hour, minute };
+      // Actualizar visualmente la tarjeta de inmediato
+      renderActiveScheduleCard(localPayload);
+
       try {
         const res = await fetch('/api/schedule', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled, frequency, day_of_week, day_of_month, hour, minute }),
+          body: JSON.stringify(localPayload),
         });
         const data = await res.json();
         if (res.ok) {

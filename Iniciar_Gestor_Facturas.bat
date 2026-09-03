@@ -22,5 +22,5 @@ if exist "venv\Scripts\activate.bat" (
 :: Abrir el navegador tras 2 segundos
 start "" cmd /c "timeout /t 2 /nobreak > nul && start http://127.0.0.1:8000"
 
-:: Iniciar el servidor web con uvicorn
-python -m uvicorn dashboard.app:app --host 127.0.0.1 --port 8000
+:: Iniciar el servidor web con uvicorn y autoreload
+python -m uvicorn dashboard.app:app --host 127.0.0.1 --port 8000 --reload
