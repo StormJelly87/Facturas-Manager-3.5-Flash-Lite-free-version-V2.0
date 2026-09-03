@@ -6,6 +6,31 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [2.1.0] - 2026-09-03
+
+### 🚀 Novedades Principales
+- **Interfaz Visual Completa (Dashboard Web Local):**
+  - Servidor local ultrarrápido con **FastAPI** y frontend SPA interactivo con **Tailwind CSS**.
+  - Monitor de estado en tiempo real (Listo, En ejecución, Error, Alertas de revisión) con terminal de eventos en vivo.
+  - Lanzador de un clic para Windows (`Iniciar_Gestor_Facturas.bat`) que inicia el servidor y abre el navegador automáticamente.
+- **Bandeja de Facturas Dudosas (Ambigüedad de Fechas & Modal Anti-Misclick):**
+  - Detección automática cuando día y mes son ambos $\le 12$ y diferentes (ej. 09/06/2026) sin regla previa.
+  - Visor de PDF/imagen integrado en pantalla para comprobación visual directa.
+  - Botones de selección rápida con mes explícito en lenguaje natural (`[Es 9 de Junio]` vs `[Es 6 de Septiembre]`).
+  - Ventana modal emergente de confirmación para evitar clics accidentales (*anti-misclick*).
+  - Reubicación física en Google Drive mediante API (`move_drive_file`) sin duplicar archivos.
+- **Bandeja de Facturas Descartadas (Rechazos y Rescate):**
+  - Almacén de cuarentena automático en `data/quarantine/` para previsualizar cualquier documento no clasificado.
+  - Diagnóstico visible con el motivo exacto del descarte reportado por Gemini.
+  - Formulario de rescate manual para asignar proveedor y fecha y subir a Drive con un clic.
+- **Motor de Aprendizaje Continuo y Persistencia (`data/vendor_rules.json`):**
+  - Memorización automática de formatos habituales de fecha y criterios de aceptación por proveedor.
+  - Consulta preventiva antes de Gemini: los proveedores con reglas aprendidas se procesan de forma directa y silenciosa.
+- **Programador Periódico Desatendido (`scheduler_service.py`):**
+  - Selector visual de frecuencia (semanal, mensual, diaria) con ejecución autónoma en segundo plano sin manipular herramientas complejas del sistema operativo.
+
+---
+
 ## [2.0.0] - 2026-09-03
 
 ### 🚀 Novedades Principales

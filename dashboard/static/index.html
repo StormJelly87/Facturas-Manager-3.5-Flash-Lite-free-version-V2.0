@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice Manager — Panel de Control & Calidad</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased overflow-hidden">
+
+  <!-- Top Navigation Bar -->
+  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700/60 px-6 py-3 flex items-center justify-between shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-500/30">
+        <i class="fa-solid fa-file-invoice-dollar"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+          Invoice Manager
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">v2.0 Flash-Lite</span>
+        </h1>
+        <p class="text-xs text-slate-400">Gestor Autónomo de Facturas & Control de Calidad</p>
+      </div>
+    </div>
+
+    <!-- Status Indicator & Quick Run Button -->
+    <div class="flex items-center space-x-4">
+      <div id="statusBadge" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600 text-sm">
+        <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="statusText" class="font-medium text-slate-200">Listo</span>
+      </div>
+
+      <button id="btnRunNow" onclick="triggerRun()" class="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-2 rounded-lg shadow-md shadow-indigo-600/30 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+        <i id="btnRunIcon" class="fa-solid fa-play text-sm"></i>
+        <span id="btnRunText">Ejecutar Ahora</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="flex flex-1 overflow-hidden">
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-slate-800/50 border-r border-slate-700/60 flex flex-col justify-between shrink-0 p-3">
+      <nav class="space-y-1.5">
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-white bg-indigo-600/20 border border-indigo-500/30">
+          <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-gauge-high w-5 text-indigo-400"></i>
+            <span>Panel de Control</span>
+          </div>
+        </button>
+
+        <button onclick="switchTab('ambiguous')" id="nav-ambiguous" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
+          <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-calendar-question w-5 text-amber-400"></i>
+            <span>Facturas Dudosas</span>
+          </div>
+          <span id="badgeAmbiguous" class="hidden text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">0</span>
+        </button>
+
+        <button onclick="switchTab('discarded')" id="nav-discarded" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
+          <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-triangle-exclamation w-5 text-rose-400"></i>
+            <span>Descartadas</span>
+          </div>
+          <span id="badgeDiscarded" class="hidden text-xs font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">0</span>
+        </button>
+
+        <button onclick="switchTab('history')" id="nav-history" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
+          <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-check-circle w-5 text-emerald-400"></i>
+            <span>Historial Éxito</span>
+          </div>
+          <span id="badgeHistory" class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">0</span>
+        </button>
+
+        <button onclick="switchTab('rules')" id="nav-rules" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
+          <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-brain w-5 text-purple-400"></i>
+            <span>Reglas Aprendidas</span>
+          </div>
+          <span id="badgeRules" class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">0</span>
+        </button>
+
+        <button onclick="switchTab('scheduler')" id="nav-scheduler" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
+          <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-clock w-5 text-sky-400"></i>
+            <span>Programador</span>
+          </div>
+        </button>
+      </nav>
+
+      <!-- Bottom Info -->
+      <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-700/40 text-xs text-slate-400 space-y-1">
+        <div class="flex items-center justify-between">
+          <span>Modelo:</span>
+          <span class="text-slate-200 font-semibold">Gemini 3.5 Flash-Lite</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span>Google Drive:</span>
+          <span class="text-emerald-400 font-semibold"><i class="fa-solid fa-circle-check text-[10px]"></i> Conectado</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto p-6 bg-slate-900">
+
+      <!-- TAB 1: DASHBOARD -->
+      <div id="tab-dashboard" class="tab-pane space-y-6">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-slate-800/70 border border-slate-700/60 p-4 rounded-xl shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Procesadas con Éxito</span>
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <i class="fa-solid fa-check"></i>
+              </div>
+            </div>
+            <div class="mt-2 flex items-baseline space-x-2">
+              <span id="statSuccess" class="text-2xl font-bold text-white">0</span>
+              <span class="text-xs text-slate-400">facturas</span>
+            </div>
+          </div>
+
+          <div class="bg-slate-800/70 border border-slate-700/60 p-4 rounded-xl shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Facturas Dudosas</span>
+              <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <i class="fa-solid fa-calendar-question"></i>
+              </div>
+            </div>
+            <div class="mt-2 flex items-baseline space-x-2">
+              <span id="statAmbiguous" class="text-2xl font-bold text-amber-400">0</span>
+              <span class="text-xs text-slate-400">requieren fecha</span>
+            </div>
+          </div>
+
+          <div class="bg-slate-800/70 border border-slate-700/60 p-4 rounded-xl shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Descartadas</span>
+              <div class="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                <i class="fa-solid fa-filter-circle-xmark"></i>
+              </div>
+            </div>
+            <div class="mt-2 flex items-baseline space-x-2">
+              <span id="statDiscarded" class="text-2xl font-bold text-rose-400">0</span>
+              <span class="text-xs text-slate-400">rescatables</span>
+            </div>
+          </div>
+
+          <div class="bg-slate-800/70 border border-slate-700/60 p-4 rounded-xl shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reglas Memorizadas</span>
+              <div class="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                <i class="fa-solid fa-brain"></i>
+              </div>
+            </div>
+            <div class="mt-2 flex items-baseline space-x-2">
+              <span id="statRules" class="text-2xl font-bold text-purple-400">0</span>
+              <span class="text-xs text-slate-400">proveedores aprendidos</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-time Activity Terminal -->
+        <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl overflow-hidden shadow-md">
+          <div class="bg-slate-800 px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-terminal text-slate-400 text-sm"></i>
+              <span class="text-sm font-semibold text-slate-200">Registro de Actividad en Vivo</span>
+            </div>
+            <span id="currentStepText" class="text-xs font-medium text-slate-400">Esperando...</span>
+          </div>
+          <div id="terminalLogs" class="p-4 font-mono text-xs text-slate-300 h-64 overflow-y-auto space-y-1 bg-slate-950/80">
+            <div class="text-slate-500">// Sistema listo. Pulsa 'Ejecutar Ahora' para iniciar el procesamiento.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: FACTURAS DUDOSAS (AMBIGÜEDAD) -->
+      <div id="tab-ambiguous" class="tab-pane hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-calendar-question text-amber-400"></i>
+              Facturas Dudosas (Resolución de Fechas)
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">Detectadas con día y mes ≤ 12 sin regla previa. Selecciona la opción correcta y se memorizará para siempre.</p>
+          </div>
+          <button onclick="loadAmbiguous()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">
+            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+          </button>
+        </div>
+
+        <div id="ambiguousList" class="space-y-4">
+          <!-- Cargado dinámicamente -->
+        </div>
+      </div>
+
+      <!-- TAB 3: FACTURAS DESCARTADAS -->
+      <div id="tab-discarded" class="tab-pane hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+              Bandeja de Facturas Descartadas
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">Documentos ignorados (albaranes, sin CIF, etc.). Puedes revisarlos en el visor y rescatarlos con un solo clic.</p>
+          </div>
+          <button onclick="loadDiscarded()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">
+            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+          </button>
+        </div>
+
+        <div id="discardedList" class="space-y-4">
+          <!-- Cargado dinámicamente -->
+        </div>
+      </div>
+
+      <!-- TAB 4: HISTORIAL ÉXITO -->
+      <div id="tab-history" class="tab-pane hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-check-circle text-emerald-400"></i>
+              Historial de Facturas Procesadas con Éxito
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">Facturas validadas y subidas correctamente a Google Drive.</p>
+          </div>
+          <button onclick="loadHistory()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">
+            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+          </button>
+        </div>
+
+        <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl overflow-hidden shadow-sm">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="bg-slate-800 text-xs uppercase font-semibold text-slate-400 border-b border-slate-700">
+              <tr>
+                <th class="px-4 py-3">Fecha Emisión</th>
+                <th class="px-4 py-3">Proveedor</th>
+                <th class="px-4 py-3">Archivo</th>
+                <th class="px-4 py-3">Carpeta en Google Drive</th>
+                <th class="px-4 py-3">Procesado</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody" class="divide-y divide-slate-700/50">
+              <!-- Cargado dinámicamente -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 5: REGLAS APRENDIDAS -->
+      <div id="tab-rules" class="tab-pane hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-brain text-purple-400"></i>
+              Reglas Memorizadas (Motor de Aprendizaje)
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">El sistema aprende con cada confirmación. Estas reglas se aplican antes de llamar a Gemini para evitar errores futuros.</p>
+          </div>
+          <button onclick="loadRules()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">
+            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+          </button>
+        </div>
+
+        <div id="rulesList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Cargado dinámicamente -->
+        </div>
+      </div>
+
+      <!-- TAB 6: PROGRAMADOR -->
+      <div id="tab-scheduler" class="tab-pane hidden space-y-6 max-w-2xl">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-clock text-sky-400"></i>
+            Programador Temporal Desatendido
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Configura la ejecución automática periódica sin manipular herramientas complejas del sistema operativo.</p>
+        </div>
+
+        <div class="bg-slate-800/70 border border-slate-700/60 p-6 rounded-xl space-y-5">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-700">
+            <div>
+              <div class="font-semibold text-slate-100">Activar Programación Automática</div>
+              <div class="text-xs text-slate-400">Ejecutar el gestor periódicamente en segundo plano</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="schedEnabled" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Frecuencia</label>
+              <select id="schedFreq" onchange="toggleFrequencyFields()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                <option value="weekly">Semanal (elegir día y hora)</option>
+                <option value="monthly">Mensual (primer día de mes u otro)</option>
+                <option value="daily">Diaria</option>
+              </select>
+            </div>
+
+            <div id="fieldWeekly" class="space-y-2">
+              <label class="block text-xs font-semibold text-slate-300 uppercase">Día de la Semana</label>
+              <select id="schedDayOfWeek" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                <option value="0">Cada Lunes</option>
+                <option value="1">Cada Martes</option>
+                <option value="2">Cada Miércoles</option>
+                <option value="3">Cada Jueves</option>
+                <option value="4">Cada Viernes</option>
+                <option value="5">Cada Sábado</option>
+                <option value="6">Cada Domingo</option>
+              </select>
+            </div>
+
+            <div id="fieldMonthly" class="space-y-2 hidden">
+              <label class="block text-xs font-semibold text-slate-300 uppercase">Día del Mes</label>
+              <input type="number" id="schedDayOfMonth" min="1" max="31" value="1" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Hora (0-23)</label>
+                <input type="number" id="schedHour" min="0" max="23" value="9" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Minuto (0-59)</label>
+                <input type="number" id="schedMinute" min="0" max="59" value="0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-700 flex justify-end">
+            <button onclick="saveSchedule()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2 rounded-lg text-sm transition">
+              <i class="fa-solid fa-floppy-disk mr-1.5"></i> Guardar Programación
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- MODAL ANTI-MISCLICK PARA RESOLVER FECHA DUDOSA -->
+  <div id="modalAntiMisclick" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+      <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl mx-auto">
+        <i class="fa-solid fa-shield-halved"></i>
+      </div>
+      <div class="text-center space-y-2">
+        <h3 class="text-lg font-bold text-white">Confirmar Regla de Fecha</h3>
+        <p class="text-sm text-slate-300" id="modalConfirmationText">
+          ¿Estás seguro de que la fecha correcta es...?
+        </p>
+        <p class="text-xs text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 mt-2">
+          <i class="fa-solid fa-lightbulb mr-1"></i> Esta regla se memorizará en el sistema para que todas las futuras facturas de este proveedor se procesen automáticamente sin preguntarte.
+        </p>
+      </div>
+
+      <div class="flex items-center space-x-3 pt-2">
+        <button onclick="closeModalAntiMisclick()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2.5 px-4 rounded-xl text-sm transition">
+          Cancelar
+        </button>
+        <button id="btnModalConfirm" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow-lg shadow-emerald-600/30 transition">
+          <i class="fa-solid fa-check mr-1.5"></i> Confirmar y Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT APP LOGIC -->
+  <script>
+    let activeTab = 'dashboard';
+    let pendingAction = null;
+
+    // Iniciar polling de estado cada 2 segundos
+    setInterval(pollStatus, 2000);
+    pollStatus();
+    loadSchedule();
+
+    function switchTab(tabId) {
+      activeTab = tabId;
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.className = 'nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition';
+      });
+
+      const pane = document.getElementById(`tab-${tabId}`);
+      if (pane) pane.classList.remove('hidden');
+
+      const navBtn = document.getElementById(`nav-${tabId}`);
+      if (navBtn) {
+        navBtn.className = 'nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-white bg-indigo-600/20 border border-indigo-500/30';
+      }
+
+      if (tabId === 'ambiguous') loadAmbiguous();
+      if (tabId === 'discarded') loadDiscarded();
+      if (tabId === 'history') loadHistory();
+      if (tabId === 'rules') loadRules();
+      if (tabId === 'scheduler') loadSchedule();
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+
+        // Actualizar Badge de Estado
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const btnRun = document.getElementById('btnRunNow');
+        const btnRunIcon = document.getElementById('btnRunIcon');
+        const btnRunText = document.getElementById('btnRunText');
+
+        if (data.status === 'running') {
+          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping';
+          statusText.textContent = 'En ejecución...';
+          btnRun.disabled = true;
+          btnRunIcon.className = 'fa-solid fa-spinner fa-spin text-sm';
+          btnRunText.textContent = 'Procesando...';
+        } else if (data.status === 'error') {
+          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+          statusText.textContent = 'Error detectado';
+          btnRun.disabled = false;
+          btnRunIcon.className = 'fa-solid fa-play text-sm';
+          btnRunText.textContent = 'Reintentar';
+        } else if (data.stats && data.stats.requires_review > 0) {
+          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+          statusText.textContent = `${data.stats.requires_review} por revisar`;
+          btnRun.disabled = false;
+          btnRunIcon.className = 'fa-solid fa-play text-sm';
+          btnRunText.textContent = 'Ejecutar Ahora';
+        } else {
+          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+          statusText.textContent = 'Listo';
+          btnRun.disabled = false;
+          btnRunIcon.className = 'fa-solid fa-play text-sm';
+          btnRunText.textContent = 'Ejecutar Ahora';
+        }
+
+        // Estadísticas
+        if (data.stats) {
+          document.getElementById('statSuccess').textContent = data.stats.success_count;
+          document.getElementById('statAmbiguous').textContent = data.stats.ambiguous_count;
+          document.getElementById('statDiscarded').textContent = data.stats.discarded_count;
+          document.getElementById('statRules').textContent = data.stats.rules_count;
+
+          updateBadge('badgeAmbiguous', data.stats.ambiguous_count);
+          updateBadge('badgeDiscarded', data.stats.discarded_count);
+          document.getElementById('badgeHistory').textContent = data.stats.success_count;
+          document.getElementById('badgeRules').textContent = data.stats.rules_count;
+        }
+
+        // Paso actual y logs
+        document.getElementById('currentStepText').textContent = data.current_step || 'Inactivo';
+        if (data.logs && data.logs.length > 0) {
+          const term = document.getElementById('terminalLogs');
+          const isScrolledToBottom = term.scrollHeight - term.clientHeight <= term.scrollTop + 40;
+          term.innerHTML = data.logs.map(l => {
+            let color = 'text-slate-300';
+            if (l.includes('[ERROR]')) color = 'text-rose-400 font-bold';
+            if (l.includes('[WARN]')) color = 'text-amber-300';
+            if (l.includes('[SUCCESS]')) color = 'text-emerald-400 font-bold';
+            if (l.includes('[DRIVE]')) color = 'text-sky-300';
+            if (l.includes('[AMBIGÜEDAD]')) color = 'text-amber-400 font-semibold';
+            return `<div class="${color}">${escapeHtml(l)}</div>`;
+          }).join('');
+
+          if (isScrolledToBottom) {
+            term.scrollTop = term.scrollHeight;
+          }
+        }
+      } catch (e) {
+        console.error('Error en pollStatus:', e);
+      }
+    }
+
+    function updateBadge(id, count) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (count > 0) {
+        el.textContent = count;
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+
+    async function triggerRun() {
+      try {
+        const res = await fetch('/api/run', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.message || 'Error al iniciar ejecución.');
+        } else {
+          pollStatus();
+        }
+      } catch (e) {
+        alert('Fallo de conexión con el servidor local.');
+      }
+    }
+
+    // ── Carga de Facturas Dudosas ───────────────────────────────────────────
+    async function loadAmbiguous() {
+      const container = document.getElementById('ambiguousList');
+      container.innerHTML = '<div class="text-slate-400 text-sm py-4">Cargando facturas dudosas...</div>';
+
+      try {
+        const res = await fetch('/api/ambiguous');
+        const items = await res.json();
+
+        if (items.length === 0) {
+          container.innerHTML = `
+            <div class="bg-slate-800/40 border border-slate-700/40 rounded-xl p-8 text-center space-y-2">
+              <div class="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl mx-auto">
+                <i class="fa-solid fa-circle-check"></i>
+              </div>
+              <h3 class="text-base font-semibold text-white">¡No hay facturas dudosas pendientes!</h3>
+              <p class="text-xs text-slate-400">Todas las fechas han sido validadas o resueltas por las reglas aprendidas.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = items.map(item => {
+          const opts = item.detected_dates || [];
+          const opt1 = opts[0] || null;
+          const opt2 = opts[1] || null;
+
+          return `
+            <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 shadow-md">
+              <!-- Visor de Documento -->
+              <div class="h-96 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 flex flex-col">
+                <div class="bg-slate-800 px-3 py-1.5 border-b border-slate-700 text-xs font-semibold text-slate-300 flex items-center justify-between">
+                  <span class="truncate">${escapeHtml(item.filename)}</span>
+                  <a href="/api/preview/${item.id}" target="_blank" class="text-indigo-400 hover:underline">Abrir en pestaña <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>
+                </div>
+                <iframe src="/api/preview/${item.id}#toolbar=0" class="w-full flex-1 border-0"></iframe>
+              </div>
+
+              <!-- Selector de Opciones Anti-Misclick -->
+              <div class="flex flex-col justify-between space-y-4">
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <i class="fa-solid fa-triangle-exclamation"></i> Ambigüedad Día/Mes
+                    </span>
+                    <span class="text-xs text-slate-400">${item.created_at || ''}</span>
+                  </div>
+
+                  <h3 class="text-lg font-bold text-white">${escapeHtml(item.supplier)}</h3>
+                  <p class="text-xs text-slate-300">
+                    Ambos números son ≤ 12 (ej. 09/06). ¿Cuál es la fecha real emitida en esta factura?
+                  </p>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    ${opt1 ? `
+                      <button onclick="promptConfirmDate('${item.id}', '${escapeHtml(item.supplier)}', ${opt1.day}, ${opt1.month}, ${opt1.year}, '${opt1.format}', '${opt1.label}')" class="bg-slate-700/80 hover:bg-indigo-600 text-left p-3.5 rounded-xl border border-slate-600 hover:border-indigo-500 transition group shadow-sm">
+                        <div class="text-xs text-slate-400 group-hover:text-indigo-200 uppercase font-semibold">Opción A (${opt1.format})</div>
+                        <div class="text-sm font-bold text-white mt-1">Es ${opt1.label}</div>
+                      </button>
+                    ` : ''}
+
+                    ${opt2 ? `
+                      <button onclick="promptConfirmDate('${item.id}', '${escapeHtml(item.supplier)}', ${opt2.day}, ${opt2.month}, ${opt2.year}, '${opt2.format}', '${opt2.label}')" class="bg-slate-700/80 hover:bg-indigo-600 text-left p-3.5 rounded-xl border border-slate-600 hover:border-indigo-500 transition group shadow-sm">
+                        <div class="text-xs text-slate-400 group-hover:text-indigo-200 uppercase font-semibold">Opción B (${opt2.format})</div>
+                        <div class="text-sm font-bold text-white mt-1">Es ${opt2.label}</div>
+                      </button>
+                    ` : ''}
+                  </div>
+
+                  <!-- Selector manual de respaldo -->
+                  <div class="pt-3 border-t border-slate-700/60">
+                    <label class="block text-xs font-semibold text-slate-400 mb-1.5">Si ninguna es correcta, introduce la fecha manualmente:</label>
+                    <div class="flex items-center space-x-2">
+                      <input type="date" id="manualDate_${item.id}" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 flex-1">
+                      <button onclick="submitManualDate('${item.id}', '${escapeHtml(item.supplier)}')" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg transition">
+                        Confirmar Manual
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-700/40 text-xs text-slate-400 flex items-center justify-between">
+                  <span>Carpeta provisional en Drive:</span>
+                  <span class="font-mono text-slate-200">${item.drive_folder_path || item.date_str}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (e) {
+        container.innerHTML = '<div class="text-rose-400 text-sm">Error cargando facturas dudosas.</div>';
+      }
+    }
+
+    // Modal Anti-Misclick
+    function promptConfirmDate(itemId, supplier, day, month, year, format, label) {
+      const text = `¿Estás seguro de que la fecha correcta es <strong>${label}</strong> para el proveedor <strong>${supplier}</strong>?`;
+      document.getElementById('modalConfirmationText').innerHTML = text;
+
+      const btnConfirm = document.getElementById('btnModalConfirm');
+      btnConfirm.onclick = async () => {
+        btnConfirm.disabled = true;
+        btnConfirm.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Guardando...';
+
+        try {
+          const res = await fetch(`/api/resolve_ambiguity/${itemId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ day, month, year, format }),
+          });
+          const data = await res.json();
+          closeModalAntiMisclick();
+          loadAmbiguous();
+          pollStatus();
+        } catch (e) {
+          alert('Error al resolver ambigüedad.');
+        } finally {
+          btnConfirm.disabled = false;
+          btnConfirm.innerHTML = '<i class="fa-solid fa-check mr-1.5"></i> Confirmar y Guardar';
+        }
+      };
+
+      document.getElementById('modalAntiMisclick').classList.remove('hidden');
+    }
+
+    function closeModalAntiMisclick() {
+      document.getElementById('modalAntiMisclick').classList.add('hidden');
+    }
+
+    function submitManualDate(itemId, supplier) {
+      const val = document.getElementById(`manualDate_${itemId}`).value;
+      if (!val) {
+        alert('Por favor selecciona una fecha válida.');
+        return;
+      }
+      const parts = val.split('-');
+      const y = parseInt(parts[0]);
+      const m = parseInt(parts[1]);
+      const d = parseInt(parts[2]);
+      const label = `${d} de mes ${m} de ${y}`;
+      promptConfirmDate(itemId, supplier, d, m, y, 'DD/MM/YYYY', label);
+    }
+
+    // ── Carga de Facturas Descartadas (Rescate) ──────────────────────────────
+    async function loadDiscarded() {
+      const container = document.getElementById('discardedList');
+      container.innerHTML = '<div class="text-slate-400 text-sm py-4">Cargando facturas descartadas...</div>';
+
+      try {
+        const res = await fetch('/api/discarded');
+        const items = await res.json();
+
+        if (items.length === 0) {
+          container.innerHTML = `
+            <div class="bg-slate-800/40 border border-slate-700/40 rounded-xl p-8 text-center space-y-2">
+              <div class="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl mx-auto">
+                <i class="fa-solid fa-shield-check"></i>
+              </div>
+              <h3 class="text-base font-semibold text-white">No hay documentos descartados</h3>
+              <p class="text-xs text-slate-400">Todos los correos analizados correspondían a facturas válidas o ya han sido revisados.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = items.map(item => `
+          <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 shadow-md">
+            <!-- Visor -->
+            <div class="h-96 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 flex flex-col">
+              <div class="bg-slate-800 px-3 py-1.5 border-b border-slate-700 text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span class="truncate">${escapeHtml(item.filename)}</span>
+                <a href="/api/preview/${item.id}" target="_blank" class="text-indigo-400 hover:underline">Abrir en pestaña <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>
+              </div>
+              <iframe src="/api/preview/${item.id}#toolbar=0" class="w-full flex-1 border-0"></iframe>
+            </div>
+
+            <!-- Diagnóstico y Rescate -->
+            <div class="flex flex-col justify-between space-y-4">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <i class="fa-solid fa-ban"></i> Descartado por el Modelo
+                  </span>
+                  <span class="text-xs text-slate-400">${item.created_at || ''}</span>
+                </div>
+
+                <div class="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3 text-xs text-rose-300">
+                  <strong class="font-semibold block mb-1">Motivo del descarte:</strong>
+                  ${escapeHtml(item.reason || 'Documento no identificado como factura fiscal válida')}
+                </div>
+
+                <div class="text-xs text-slate-400 space-y-1">
+                  <div><strong>Remitente:</strong> ${escapeHtml(item.sender || 'Desconocido')}</div>
+                  <div><strong>Asunto:</strong> ${escapeHtml(item.email_subject || 'Sin asunto')}</div>
+                </div>
+
+                <!-- Formulario de Rescate -->
+                <div class="pt-3 border-t border-slate-700/60 space-y-3">
+                  <div class="text-xs font-bold text-white uppercase tracking-wide">Acción de Rescate Manual</div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Asignar Proveedor:</label>
+                    <input type="text" id="rescueSupplier_${item.id}" value="${escapeHtml(item.supplier !== 'DESCONOCIDO' ? item.supplier : '')}" placeholder="Nombre del proveedor (ej. LIDL)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Fecha de Factura:</label>
+                    <input type="date" id="rescueDate_${item.id}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  </div>
+                  <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="rescueRule_${item.id}" checked class="rounded border-slate-700 text-indigo-600 bg-slate-900">
+                    <label for="rescueRule_${item.id}" class="text-xs text-slate-300">Aprender y aceptar siempre este proveedor en el futuro</label>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <button onclick="rescueInvoice('${item.id}')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow-md shadow-emerald-600/30 transition flex items-center justify-center space-x-2">
+                  <i class="fa-solid fa-box-archive"></i>
+                  <span>Marcar como Válida y Subir a Google Drive</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+      } catch (e) {
+        container.innerHTML = '<div class="text-rose-400 text-sm">Error cargando facturas descartadas.</div>';
+      }
+    }
+
+    async function rescueInvoice(itemId) {
+      const supplier = document.getElementById(`rescueSupplier_${itemId}`).value.trim();
+      const date = document.getElementById(`rescueDate_${itemId}`).value;
+      const alwaysAccept = document.getElementById(`rescueRule_${itemId}`).checked;
+
+      if (!supplier) {
+        alert('Por favor introduce el nombre del proveedor.');
+        return;
+      }
+      if (!date) {
+        alert('Por favor selecciona la fecha de la factura.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/rescue/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ supplier, date, always_accept: alwaysAccept }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.detail || 'Error al rescatar factura.');
+        } else {
+          alert('¡Factura rescatada con éxito y subida a Google Drive!');
+          loadDiscarded();
+          pollStatus();
+        }
+      } catch (e) {
+        alert('Fallo de conexión al rescatar.');
+      }
+    }
+
+    // ── Carga de Historial de Éxito ─────────────────────────────────────────
+    async function loadHistory() {
+      const tbody = document.getElementById('historyTableBody');
+      tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-slate-400 text-center">Cargando historial...</td></tr>';
+
+      try {
+        const res = await fetch('/api/history');
+        const items = await res.json();
+
+        if (items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-slate-400 text-center">Aún no hay facturas procesadas registradas en el historial.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = items.map(item => `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="px-4 py-3 font-medium text-slate-200">${item.date_str || '-'}</td>
+            <td class="px-4 py-3 font-semibold text-white">${escapeHtml(item.supplier)}</td>
+            <td class="px-4 py-3 text-xs text-slate-300 truncate max-w-xs">${escapeHtml(item.filename)}</td>
+            <td class="px-4 py-3 text-xs font-mono text-sky-400">${escapeHtml(item.drive_folder_path || '-')}</td>
+            <td class="px-4 py-3 text-xs text-slate-400">${item.created_at ? item.created_at.replace('T', ' ') : '-'}</td>
+          </tr>
+        `).join('');
+
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-rose-400 text-center">Error al cargar historial.</td></tr>';
+      }
+    }
+
+    // ── Carga de Reglas Aprendidas ───────────────────────────────────────────
+    async function loadRules() {
+      const container = document.getElementById('rulesList');
+      container.innerHTML = '<div class="text-slate-400 text-sm py-4">Cargando reglas memorizadas...</div>';
+
+      try {
+        const res = await fetch('/api/rules');
+        const data = await res.json();
+        const rules = data.rules || {};
+        const keys = Object.keys(rules);
+
+        if (keys.length === 0) {
+          container.innerHTML = `
+            <div class="col-span-2 bg-slate-800/40 border border-slate-700/40 rounded-xl p-8 text-center space-y-2">
+              <div class="w-12 h-12 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl mx-auto">
+                <i class="fa-solid fa-brain"></i>
+              </div>
+              <h3 class="text-base font-semibold text-white">No hay reglas aprendidas todavía</h3>
+              <p class="text-xs text-slate-400">A medida que confirmes fechas en 'Facturas Dudosas' o rescates facturas, el sistema memorizará las reglas aquí automáticamente.</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = keys.map(key => {
+          const rule = rules[key];
+          return `
+            <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-3 shadow-sm">
+              <div class="flex items-center justify-between">
+                <h4 class="font-bold text-white text-base">${escapeHtml(rule.display_name || key)}</h4>
+                <button onclick="deleteRule('${key}')" class="text-rose-400 hover:text-rose-300 text-xs px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 transition">
+                  <i class="fa-solid fa-trash-can mr-1"></i> Olvidar Regla
+                </button>
+              </div>
+
+              <div class="text-xs text-slate-300 space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400">Formato de Fecha Habitual:</span>
+                  <span class="font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">${rule.date_format || 'DD/MM/YYYY'}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400">Aceptar Siempre:</span>
+                  <span class="font-semibold ${rule.always_accept ? 'text-emerald-400' : 'text-slate-400'}">${rule.always_accept ? 'Sí (Omitir filtro CIF)' : 'No'}</span>
+                </div>
+                ${rule.notes ? `<div class="text-slate-400 italic pt-1 border-t border-slate-700/50">${escapeHtml(rule.notes)}</div>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (e) {
+        container.innerHTML = '<div class="text-rose-400 text-sm">Error cargando reglas.</div>';
+      }
+    }
+
+    async function deleteRule(supplierKey) {
+      if (!confirm(`¿Eliminar la regla aprendida para ${supplierKey}?`)) return;
+      try {
+        await fetch(`/api/rules/${supplierKey}`, { method: 'DELETE' });
+        loadRules();
+        pollStatus();
+      } catch (e) {
+        alert('Error al eliminar regla.');
+      }
+    }
+
+    // ── Programador ──────────────────────────────────────────────────────────
+    async function loadSchedule() {
+      try {
+        const res = await fetch('/api/schedule');
+        const s = await res.json();
+        document.getElementById('schedEnabled').checked = !!s.enabled;
+        document.getElementById('schedFreq').value = s.frequency || 'weekly';
+        document.getElementById('schedDayOfWeek').value = s.day_of_week ?? 0;
+        document.getElementById('schedDayOfMonth').value = s.day_of_month ?? 1;
+        document.getElementById('schedHour').value = s.hour ?? 9;
+        document.getElementById('schedMinute').value = s.minute ?? 0;
+        toggleFrequencyFields();
+      } catch (e) {
+        console.error('Error al cargar programador:', e);
+      }
+    }
+
+    function toggleFrequencyFields() {
+      const freq = document.getElementById('schedFreq').value;
+      document.getElementById('fieldWeekly').classList.toggle('hidden', freq !== 'weekly');
+      document.getElementById('fieldMonthly').classList.toggle('hidden', freq !== 'monthly');
+    }
+
+    async function saveSchedule() {
+      const enabled = document.getElementById('schedEnabled').checked;
+      const frequency = document.getElementById('schedFreq').value;
+      const day_of_week = parseInt(document.getElementById('schedDayOfWeek').value);
+      const day_of_month = parseInt(document.getElementById('schedDayOfMonth').value);
+      const hour = parseInt(document.getElementById('schedHour').value);
+      const minute = parseInt(document.getElementById('schedMinute').value);
+
+      try {
+        const res = await fetch('/api/schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled, frequency, day_of_week, day_of_month, hour, minute }),
+        });
+        if (res.ok) {
+          alert('¡Programación guardada correctamente!');
+        } else {
+          alert('Error al guardar programación.');
+        }
+      } catch (e) {
+        alert('Fallo de conexión.');
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>

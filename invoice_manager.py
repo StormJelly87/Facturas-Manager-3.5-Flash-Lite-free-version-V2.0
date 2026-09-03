@@ -727,8 +727,18 @@ Responde estrictamente con un objeto JSON:
             if fallback_id:
                 tax_id = fallback_id
                 tax_id_valid = _is_valid_tax_id(tax_id)
-                if tax_id_valid:
-                    log(f"  [FALLBACK] CIF/VAT rescatado del PDF: {tax_id}")
+        # ── Consultar Regla Aprendida (Feedback Loop) ──
+        vendor_rule = None
+        try:
+            import data_manager
+            vendor_rule = data_manager.get_vendor_rule(supplier) or data_manager.get_vendor_rule(sender_email)
+        except Exception:
+            pass
+
+        if not tax_id_valid and vendor_rule and vendor_rule.get("always_accept"):
+            log(f"  [REGLA-APRENDIDA] Proveedor '{supplier}' tiene 'always_accept=True'. Validación fiscal forzada.")
+            tax_id = vendor_rule.get("tax_id") or "ACEPTADO-POR-REGLA"
+            tax_id_valid = True
 
         if not tax_id_valid:
             # Último recurso: comparar con facturas de referencia
@@ -843,6 +853,19 @@ Responde estrictamente con un objeto JSON:
                 except ValueError:
                     pass
 
+        # Aplicar formato de fecha aprendido si existe
+        has_learned_date_format = bool(vendor_rule and vendor_rule.get("date_format"))
+        if has_learned_date_format:
+            fmt = vendor_rule["date_format"].upper()
+            if fmt == "MM/DD/YYYY" and dt.day <= 12 and dt.month <= 12:
+                try:
+                    dt = dt.replace(month=dt.day, day=dt.month)
+                    log(f"  [REGLA-FECHA] Formato MM/DD/YYYY aplicado para '{supplier}': {dt.strftime('%d/%m/%Y')}")
+                except ValueError:
+                    pass
+            elif fmt == "DD/MM/YYYY":
+                log(f"  [REGLA-FECHA] Formato DD/MM/YYYY confirmado para '{supplier}': {dt.strftime('%d/%m/%Y')}")
+
         # Filtro de Seguridad Automático (Fecha Futura)
         now = datetime.now()
         if dt > now:
@@ -855,13 +878,48 @@ Responde estrictamente con un objeto JSON:
             if dt > now:
                 dt = now
 
+        # Detección de Ambigüedad (ambos <= 12, diferentes y sin regla aprendida)
+        is_ambiguous = False
+        ambiguous_options = []
+        if not has_learned_date_format and dt.day <= 12 and dt.month <= 12 and dt.day != dt.month:
+            is_ambiguous = True
+            _MONTH_NAMES_ES = {
+                1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+                5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+                9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+            }
+            ambiguous_options = [
+                {
+                    "day": dt.day,
+                    "month": dt.month,
+                    "year": dt.year,
+                    "format": "DD/MM/YYYY",
+                    "folder": f"{dt.month:02d}-{str(dt.year)[-2:]}",
+                    "label": f"{dt.day} de {_MONTH_NAMES_ES.get(dt.month, '')} de {dt.year}",
+                },
+                {
+                    "day": dt.month,
+                    "month": dt.day,
+                    "year": dt.year,
+                    "format": "MM/DD/YYYY",
+                    "folder": f"{dt.day:02d}-{str(dt.year)[-2:]}",
+                    "label": f"{dt.month} de {_MONTH_NAMES_ES.get(dt.day, '')} de {dt.year}",
+                }
+            ]
+            log(f"  [AMBIGÜEDAD] Fecha ambigua detectada ({dt.day}/{dt.month} vs {dt.month}/{dt.day}) para '{supplier}'")
+
         date_str = dt.strftime("%m-%y")
 
         # Doble comprobación: log del día, mes y carpeta destino
         log(f"  [FECHA] Procesando dia: {dt.strftime('%d')}, mes: {dt.strftime('%m')}. Carpeta destino: {date_str}")
 
         log(f"  [SI] Factura confirmada -- Proveedor: {supplier} | CIF: {tax_id} | Fecha: {date_str}")
-        return {"supplier": supplier, "date": date_str}
+        return {
+            "supplier": supplier,
+            "date": date_str,
+            "is_ambiguous": is_ambiguous,
+            "ambiguous_options": ambiguous_options,
+        }
 
     except (json.JSONDecodeError, KeyError) as e:
         log(f"  Error al parsear respuesta de Gemini: {e}", "ERROR")
@@ -1148,6 +1206,23 @@ def upload_to_drive(service, filepath: str, folder_id: str) -> str | None:
     return file["id"]
 
 
+def move_drive_file(service, file_id: str, old_parent_id: str, new_parent_id: str) -> bool:
+    """Mueve un archivo en Google Drive de una carpeta a otra sin duplicarlo."""
+    try:
+        service.files().update(
+            fileId=file_id,
+            addParents=new_parent_id,
+            removeParents=old_parent_id,
+            fields="id, parents",
+            supportsAllDrives=True,
+        ).execute()
+        log(f"  [DRIVE] Archivo {file_id} movido exitosamente a carpeta {new_parent_id}")
+        return True
+    except Exception as e:
+        log(f"  [DRIVE-ERROR] Error al mover archivo {file_id}: {e}", "ERROR")
+        return False
+
+
 # ── Flujo principal ──────────────────────────────────────────────────────────
 
 def process_invoice(
@@ -1191,6 +1266,20 @@ def process_invoice(
             info = validate_is_invoice(gemini_client, filepath, sender_email=sender, reference_fps=reference_fps)
             if info is None:
                 log(f"  Adjunto no es factura, saltando...")
+                try:
+                    import data_manager
+                    data_manager.add_history_entry(
+                        status="DISCARDED",
+                        filename=os.path.basename(filepath),
+                        supplier=sender or "DESCONOCIDO",
+                        date_str=datetime.now().strftime("%m-%y"),
+                        reason="No clasificado como factura válida o sin identificación fiscal (CIF/NIF/VAT)",
+                        original_filepath=filepath,
+                        email_subject=subject,
+                        sender=sender,
+                    )
+                except Exception as e_dm:
+                    log(f"  [WARN] Fallo al registrar descarte: {e_dm}")
                 continue
 
             any_invoice_found = True
@@ -1225,7 +1314,26 @@ def process_invoice(
             )
 
             # 2d. Subir archivo
-            upload_to_drive(drive_service, filepath, supplier_folder_id)
+            drive_file_id = upload_to_drive(drive_service, filepath, supplier_folder_id)
+            is_ambiguous = info.get("is_ambiguous", False)
+            try:
+                import data_manager
+                status_to_record = "AMBIGUOUS_DATE" if is_ambiguous else "SUCCESS"
+                data_manager.add_history_entry(
+                    status=status_to_record,
+                    filename=os.path.basename(filepath),
+                    supplier=supplier_name,
+                    date_str=date_str,
+                    drive_file_id=drive_file_id,
+                    drive_folder_id=supplier_folder_id,
+                    drive_folder_path=f"{year_folder}/{month_folder_name}/{supplier_name}",
+                    original_filepath=filepath,
+                    email_subject=subject,
+                    sender=sender,
+                    detected_dates=info.get("ambiguous_options", []),
+                )
+            except Exception as e_dm:
+                log(f"  [WARN] Fallo al registrar historial: {e_dm}")
 
         except GeminiAPIError as e:
             log(f"  Error de API Gemini: {e}", "ERROR")
@@ -1309,9 +1417,22 @@ def process_enviomedical(drive_service, tmp_dir: str) -> None:
 
                 year_id     = get_or_create_folder(drive_service, year_folder, DRIVE_ROOT_ID)
                 month_id    = get_or_create_folder(drive_service, month_folder, year_id)
-                supplier_id = get_or_create_supplier_folder(drive_service, supplier_name, month_id)
-
-                upload_to_drive(drive_service, pdf_path, supplier_id)
+                uploaded_id = upload_to_drive(drive_service, pdf_path, supplier_id)
+                try:
+                    import data_manager
+                    data_manager.add_history_entry(
+                        status="SUCCESS",
+                        filename=f"{inv['id']}.pdf",
+                        supplier=supplier_name,
+                        date_str=month_folder,
+                        drive_file_id=uploaded_id,
+                        drive_folder_id=supplier_id,
+                        drive_folder_path=f"{year_folder}/{month_folder}/{supplier_name}",
+                        amount=inv.get("importe"),
+                        reason="Descargado automáticamente del portal B2B",
+                    )
+                except Exception:
+                    pass
 
                 # Registrar en el estado SOLO si todo el proceso terminó bien
                 state["processed"][inv["id"]] = {

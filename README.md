@@ -143,6 +143,17 @@ DRIVE_ROOT_FOLDER_ID=tu-id-de-carpeta-raiz
 
 ## 🚀 Uso
 
+### Opción 1: Panel de Control Visual (Recomendado para el día a día)
+Haz **doble clic en `Iniciar_Gestor_Facturas.bat`**.
+Se abrirá automáticamente tu navegador en `http://127.0.0.1:8000` con:
+- **Botón "Play"** para ejecutar en segundo plano con consola de actividad en tiempo real.
+- **Bandeja de Facturas Dudosas** con visor de PDF integrado, botones rápidos de fecha y modal de confirmación anti-misclick.
+- **Bandeja de Descartadas** con diagnóstico y rescate manual hacia Google Drive.
+- **Historial de Éxito** con enlaces a carpetas de Google Drive.
+- **Motor de Aprendizaje Continuo:** Cada corrección manual enseña al sistema para siempre.
+- **Programador Periódico:** Selector visual semanal/mensual sin tocar herramientas del sistema operativo.
+
+### Opción 2: Ejecución Directa por Consola
 ```bash
 python invoice_manager.py
 ```
@@ -161,7 +172,7 @@ La **primera vez** se abrirá tu navegador para autorizar el acceso a Google Dri
       - Nombre del proveedor
       - CIF/NIF/VAT del emisor
       - Fecha de la factura
-   c. Valida que tenga un CIF/NIF/VAT válido
+   c. Valida que tenga un CIF/NIF/VAT válido (o regla aprendida en vendor_rules.json)
    d. Si el remitente es @amazon.*, fuerza proveedor = AMAZON
    e. Crea en Google Drive la estructura:
       📁 [Carpeta Raíz]
@@ -179,17 +190,24 @@ La **primera vez** se abrirá tu navegador para autorizar el acceso a Google Dri
 
 ```text
 invoice-manager/
-├── invoice_manager.py           ← Script principal (Gemini + IMAP + Drive)
-├── enviomedical_portal.py       ← Módulo Fase 2 (Portal B2B EnvíoMédical)
-├── GUIA_RESTAURACION.md         ← Guía completa paso a paso para no informáticos
-├── CHANGELOG.md                 ← Historial detallado de versiones y mejoras
-├── requirements.txt             ← Dependencias de Python
-├── .env.example                 ← Plantilla de configuración
-├── .env                         ← Tu configuración con contraseñas (NO se sube a git)
-├── credentials.json             ← Credenciales OAuth de Google (NO se sube a git)
-├── token.json                   ← Token generado automáticamente (NO se sube a git)
-├── supplier_aliases.example.json← Plantilla para mapeo opcional de alias/CIFs
-└── supplier_aliases.json        ← Tus alias de proveedores locales (NO se sube a git)
+├── Iniciar_Gestor_Facturas.bat   ← Lanzador de un clic para Windows
+├── dashboard/                    ← Servidor web local y frontend SPA
+│   ├── app.py                    ← Servidor FastAPI (endpoints REST & visor)
+│   └── static/index.html         ← Interfaz visual interactiva (Tailwind CSS)
+├── data_manager.py               ← Persistencia (historial, cuarentena, reglas)
+├── pipeline_orchestrator.py      ← Conector asíncrono y monitor en tiempo real
+├── scheduler_service.py          ← Programador periódico desatendido
+├── invoice_manager.py            ← Script principal (Gemini + IMAP + Drive)
+├── enviomedical_portal.py        ← Módulo Fase 2 (Portal B2B EnvíoMédical)
+├── GUIA_RESTAURACION.md           ← Guía completa paso a paso para no informáticos
+├── CHANGELOG.md                   ← Historial detallado de versiones y mejoras
+├── requirements.txt               ← Dependencias de Python
+├── .env.example                   ← Plantilla de configuración
+├── .env                           ← Tu configuración con contraseñas (NO se sube a git)
+├── credentials.json               ← Credenciales OAuth de Google (NO se sube a git)
+├── token.json                     ← Token generado automáticamente (NO se sube a git)
+├── supplier_aliases.example.json  ← Plantilla para mapeo opcional de alias/CIFs
+└── supplier_aliases.json          ← Tus alias de proveedores locales (NO se sube a git)
 ```
 
 ---

@@ -4,8 +4,9 @@ credentials.json
 token.json
 supplier_aliases.json
 
-# Estado local de sincronizacion del portal EnvioMedical
+# Estado local de sincronizacion y almacenamiento
 enviomedical_state.json
+data/
 
 # Python
 __pycache__/
