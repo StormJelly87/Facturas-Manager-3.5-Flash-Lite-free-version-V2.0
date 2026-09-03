@@ -149,6 +149,42 @@ def discard_history_entry(entry_id: str, reason: str = "Descartado manualmente p
     })
 
 
+def confirm_discard_and_archive(entry_id: str, delete_file: bool = False) -> bool:
+    """Confirma el descarte correcto y retira el documento de la bandeja de revisión activa."""
+    entry = get_history_entry(entry_id)
+    if not entry:
+        return False
+    if delete_file and entry.get("quarantine_file"):
+        path = os.path.join(QUARANTINE_DIR, entry["quarantine_file"])
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+    return update_history_entry(entry_id, {
+        "status": "DISCARDED_CONFIRMED",
+        "reason": f"{entry.get('reason', '')} (Descarte confirmado por el usuario)",
+    })
+
+
+def delete_history_entry(entry_id: str) -> bool:
+    """Elimina permanentemente una entrada del historial y su archivo de cuarentena."""
+    history = _load_history_raw()
+    entry = next((e for e in history if e.get("id") == entry_id), None)
+    if not entry:
+        return False
+    if entry.get("quarantine_file"):
+        path = os.path.join(QUARANTINE_DIR, entry["quarantine_file"])
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+    new_history = [e for e in history if e.get("id") != entry_id]
+    _save_history_raw(new_history)
+    return True
+
+
 def get_quarantine_path(entry_id: str) -> str | None:
     """Devuelve la ruta absoluta del archivo en cuarentena si existe."""
     entry = get_history_entry(entry_id)

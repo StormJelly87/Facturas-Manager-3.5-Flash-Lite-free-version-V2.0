@@ -112,6 +112,28 @@ class TestDashboardAndRules(unittest.TestCase):
         self.assertEqual(updated["status"], "DISCARDED")
         self.assertEqual(updated["reason"], "Descartado en prueba")
 
+    def test_confirm_discard_and_delete_endpoint(self):
+        """Verifica que confirmar el descarte retire el elemento de la lista y actualice contadores."""
+        entry_id = data_manager.add_history_entry(
+            status="DISCARDED",
+            filename="pedido_descartable.pdf",
+            supplier="CARREFOUR TEST",
+            date_str="09-26",
+            reason="Confirmación de pedido",
+            original_filepath=self.dummy_pdf,
+        )
+        # Verificar que esté en discarded
+        discarded = data_manager.get_history(status="DISCARDED")
+        self.assertTrue(any(e["id"] == entry_id for e in discarded))
+
+        # Llamar DELETE endpoint
+        res = self.client.delete(f"/api/discarded/{entry_id}")
+        self.assertEqual(res.status_code, 200)
+
+        # Verificar que ya no esté en la lista activa de descartadas
+        discarded_after = data_manager.get_history(status="DISCARDED")
+        self.assertFalse(any(e["id"] == entry_id for e in discarded_after))
+
     def test_fastapi_endpoints(self):
         """Prueba los endpoints REST."""
         res = self.client.get("/api/status")
@@ -122,6 +144,9 @@ class TestDashboardAndRules(unittest.TestCase):
 
         res = self.client.get("/api/schedule")
         self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("frequency_text", data)
+        self.assertIn("catchup_enabled", data)
 
 
 if __name__ == "__main__":

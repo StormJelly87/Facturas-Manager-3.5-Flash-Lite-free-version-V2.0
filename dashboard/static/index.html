@@ -50,11 +50,12 @@
       </div>
     </div>
 
-    <!-- Status Indicator & Quick Run Button -->
+    <!-- Status Indicator (Clickeable para ir a pendientes) & Quick Run Button -->
     <div class="flex items-center space-x-4">
-      <div id="statusBadge" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600 text-sm">
+      <div id="statusBadge" onclick="goToPendingReview()" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600 text-sm cursor-pointer hover:bg-slate-700 transition active:scale-95" title="Haz clic para ir directamente a revisar las tareas pendientes">
         <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
         <span id="statusText" class="font-medium text-slate-200">Listo</span>
+        <i class="fa-solid fa-arrow-right text-[10px] text-slate-400 ml-1"></i>
       </div>
 
       <button id="btnRunNow" onclick="triggerRun()" class="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-2 rounded-lg shadow-md shadow-indigo-600/30 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -259,7 +260,7 @@
               <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
               Bandeja de Facturas Descartadas
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Documentos ignorados (albaranes, confirmaciones de pedido, sin CIF fiscal). Puedes revisarlos y rescatarlos con un solo clic.</p>
+            <p class="text-xs text-slate-400 mt-0.5">Documentos ignorados (albaranes, confirmaciones de pedido, sin CIF fiscal). Puedes revisarlos, quitarlos de la lista o rescatarlos como facturas válidas.</p>
           </div>
           <button onclick="loadDiscarded()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
             <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
@@ -325,15 +326,47 @@
       </div>
 
       <!-- TAB 6: PROGRAMADOR -->
-      <div id="tab-scheduler" class="tab-pane hidden space-y-6 max-w-2xl">
+      <div id="tab-scheduler" class="tab-pane hidden space-y-6 max-w-3xl">
         <div>
           <h2 class="text-xl font-bold text-white flex items-center gap-2">
             <i class="fa-solid fa-clock text-sky-400"></i>
             Programador Temporal Desatendido
           </h2>
-          <p class="text-xs text-slate-400 mt-0.5">Configura la ejecución periódica automática sin manipular herramientas complejas del sistema operativo.</p>
+          <p class="text-xs text-slate-400 mt-0.5">Configura la ejecución periódica automática en segundo plano con soporte de recuperación si el PC estaba apagado.</p>
         </div>
 
+        <!-- Tarjeta de Estado de la Programación Activa -->
+        <div id="activeScheduleCard" class="bg-gradient-to-r from-slate-800 to-indigo-950/40 border border-slate-700/80 rounded-xl p-5 shadow-sm space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <i class="fa-solid fa-calendar-check text-indigo-400"></i>
+              Programación Guardada y Activa
+            </span>
+            <span id="activeSchedBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300">Inactiva</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div class="bg-slate-900/70 border border-slate-700/50 rounded-lg p-3">
+              <span class="text-[11px] text-slate-400 block font-medium">Frecuencia y Horario:</span>
+              <span id="activeSchedFreqText" class="text-sm font-bold text-white mt-0.5 block">Sin programar</span>
+            </div>
+            <div class="bg-slate-900/70 border border-slate-700/50 rounded-lg p-3">
+              <span class="text-[11px] text-slate-400 block font-medium">Última ejecución automática:</span>
+              <span id="activeSchedLastRunText" class="text-sm font-semibold text-slate-200 mt-0.5 block">Ninguna todavía</span>
+            </div>
+          </div>
+
+          <!-- Indicador de Catch-Up -->
+          <div class="text-xs text-sky-300/90 bg-sky-500/10 border border-sky-500/20 rounded-lg p-3 flex items-start gap-2.5">
+            <i class="fa-solid fa-clock-rotate-left text-sky-400 text-sm mt-0.5 shrink-0"></i>
+            <div>
+              <strong class="font-semibold text-sky-200 block">Recuperación automática de ejecuciones (Catch-Up):</strong>
+              Si tu ordenador estaba apagado o suspendido en el momento en que tocaba ejecutarse, en cuanto abras la aplicación el sistema detectará la ejecución pendiente y la lanzará automáticamente.
+            </div>
+          </div>
+        </div>
+
+        <!-- Formulario de Configuración -->
         <div class="bg-slate-800/70 border border-slate-700/60 p-6 rounded-xl space-y-5">
           <div class="flex items-center justify-between pb-4 border-b border-slate-700">
             <div>
@@ -460,6 +493,18 @@
     pollStatus();
     loadSchedule();
 
+    function goToPendingReview() {
+      const statAmb = parseInt(document.getElementById('statAmbiguous').textContent) || 0;
+      const statDisc = parseInt(document.getElementById('statDiscarded').textContent) || 0;
+      if (statAmb > 0) {
+        switchTab('ambiguous');
+      } else if (statDisc > 0) {
+        switchTab('discarded');
+      } else {
+        switchTab('dashboard');
+      }
+    }
+
     function switchTab(tabId) {
       activeTab = tabId;
       document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
@@ -549,6 +594,7 @@
             if (l.includes('[DRIVE]')) color = 'text-sky-300 font-semibold';
             if (l.includes('[AMBIGÜEDAD]') || l.includes('[DUDOSA]')) color = 'text-amber-400 font-semibold';
             if (l.includes('[DESCARTADA]')) color = 'text-rose-300';
+            if (l.includes('[SCHEDULER]')) color = 'text-sky-400 font-semibold';
             return `<div class="${color}">${escapeHtml(l)}</div>`;
           }).join('');
 
@@ -565,7 +611,7 @@
       const container = document.getElementById('sessionTableContainer');
       const countBadge = document.getElementById('sessionCountText');
       if (!items || items.length === 0) {
-        return; // Conservar el estado previo o placeholder
+        return;
       }
 
       countBadge.textContent = `${items.length} procesado(s)`;
@@ -822,7 +868,7 @@
       promptConfirmDate(itemId, supplier, d, m, y, 'DD/MM/YYYY', label);
     }
 
-    // ── Carga de Facturas Descartadas (Rescate con Motivo) ───────────────────
+    // ── Carga de Facturas Descartadas (Rescate o Retirada de Lista) ──────────
     async function loadDiscarded() {
       const container = document.getElementById('discardedList');
       container.innerHTML = '<div class="text-slate-400 text-sm py-4">Cargando facturas descartadas...</div>';
@@ -837,8 +883,8 @@
               <div class="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl mx-auto">
                 <i class="fa-solid fa-shield-check"></i>
               </div>
-              <h3 class="text-base font-semibold text-white">No hay documentos descartados</h3>
-              <p class="text-xs text-slate-400">Todos los correos analizados correspondían a facturas válidas o ya han sido revisados.</p>
+              <h3 class="text-base font-semibold text-white">No hay documentos pendientes de revisar</h3>
+              <p class="text-xs text-slate-400">Todos los correos analizados correspondían a facturas válidas o ya han sido confirmados como descartados.</p>
             </div>
           `;
           return;
@@ -855,7 +901,7 @@
               <iframe src="/api/preview/${item.id}#toolbar=0" class="w-full flex-1 border-0"></iframe>
             </div>
 
-            <!-- Diagnóstico y Rescate -->
+            <!-- Diagnóstico, Retirada y Rescate -->
             <div class="flex flex-col justify-between space-y-4">
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
@@ -890,17 +936,22 @@
                     <label class="block text-xs font-medium text-slate-300 mb-1">Motivo del rescate o pista para el sistema (opcional):</label>
                     <textarea id="rescueReason_${item.id}" rows="2" placeholder="Ej: Es un ticket de compra válido, el CIF aparece al pie del documento." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"></textarea>
                   </div>
-                  <div class="flex items-center space-x-2">
-                    <input type="checkbox" id="rescueRule_${item.id}" checked class="rounded border-slate-700 text-indigo-600 bg-slate-900">
-                    <label for="rescueRule_${item.id}" class="text-xs text-slate-300">Aprender y aceptar siempre este proveedor en el futuro</label>
+                  <div class="text-[11px] text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 flex items-center gap-1.5">
+                    <i class="fa-solid fa-brain text-emerald-400"></i>
+                    <span>Al marcar como válida, el sistema memorizará automáticamente al proveedor para aceptarlo en el futuro.</span>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <button onclick="rescueInvoice('${item.id}')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow-md shadow-emerald-600/30 transition flex items-center justify-center space-x-2">
+              <!-- Botones de Acción: Confirmar Descarte vs Rescatar -->
+              <div class="pt-2 flex items-center space-x-3">
+                <button onclick="dismissDiscarded('${item.id}', '${escapeHtml(item.filename)}')" class="flex-1 bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white font-medium py-2.5 px-3 rounded-xl text-xs transition border border-slate-600 flex items-center justify-center gap-1.5 shadow-sm" title="Dar la razón al sistema y retirar este documento de la lista de revisión">
+                  <i class="fa-solid fa-check-double text-slate-400"></i>
+                  <span>Confirmar Descarte</span>
+                </button>
+                <button onclick="rescueInvoice('${item.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-3 rounded-xl text-xs shadow-md shadow-emerald-600/30 transition flex items-center justify-center gap-1.5">
                   <i class="fa-solid fa-box-archive"></i>
-                  <span>Marcar como Válida y Subir a Google Drive</span>
+                  <span>Marcar como Válida</span>
                 </button>
               </div>
             </div>
@@ -912,10 +963,26 @@
       }
     }
 
+    async function dismissDiscarded(itemId, filename) {
+      if (!confirm(`¿Confirmas que este documento (${filename}) está bien descartado y deseas quitarlo de la lista?`)) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/discarded/${itemId}`, { method: 'DELETE' });
+        if (res.ok) {
+          loadDiscarded();
+          pollStatus();
+        } else {
+          alert('Error al retirar el documento.');
+        }
+      } catch (e) {
+        alert('Fallo de conexión.');
+      }
+    }
+
     async function rescueInvoice(itemId) {
       const supplier = document.getElementById(`rescueSupplier_${itemId}`).value.trim();
       const date = document.getElementById(`rescueDate_${itemId}`).value;
-      const alwaysAccept = document.getElementById(`rescueRule_${itemId}`).checked;
       const reasonNotes = document.getElementById(`rescueReason_${itemId}`).value.trim();
 
       if (!supplier) {
@@ -931,7 +998,7 @@
         const res = await fetch(`/api/rescue/${itemId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ supplier, date, always_accept: alwaysAccept, reason_notes: reasonNotes }),
+          body: JSON.stringify({ supplier, date, always_accept: true, reason_notes: reasonNotes }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -975,7 +1042,7 @@
       }
     }
 
-    // ── Carga de Reglas Aprendidas (Explicación Rápida & Detallada) ──────────
+    // ── Carga de Reglas Aprendidas ──────────────────────────────────────────
     async function loadRules() {
       const container = document.getElementById('rulesList');
       container.innerHTML = '<div class="text-slate-400 text-sm py-4">Cargando reglas memorizadas...</div>';
@@ -1057,6 +1124,23 @@
     }
 
     // ── Programador ──────────────────────────────────────────────────────────
+    function renderActiveScheduleCard(s) {
+      const badge = document.getElementById('activeSchedBadge');
+      const freqText = document.getElementById('activeSchedFreqText');
+      const lastRunText = document.getElementById('activeSchedLastRunText');
+
+      if (s.enabled) {
+        badge.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5';
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Activa';
+      } else {
+        badge.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-400';
+        badge.textContent = 'Inactiva';
+      }
+
+      freqText.textContent = s.frequency_text || 'Sin programar';
+      lastRunText.textContent = s.last_run_text || 'Ninguna todavía';
+    }
+
     async function loadSchedule() {
       try {
         const res = await fetch('/api/schedule');
@@ -1068,6 +1152,7 @@
         document.getElementById('schedHour').value = s.hour ?? 9;
         document.getElementById('schedMinute').value = s.minute ?? 0;
         toggleFrequencyFields();
+        renderActiveScheduleCard(s);
       } catch (e) {
         console.error('Error al cargar programador:', e);
       }
@@ -1093,7 +1178,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enabled, frequency, day_of_week, day_of_month, hour, minute }),
         });
+        const data = await res.json();
         if (res.ok) {
+          if (data.schedule) {
+            renderActiveScheduleCard(data.schedule);
+          }
           alert('¡Programación guardada correctamente!');
         } else {
           alert('Error al guardar programación.');

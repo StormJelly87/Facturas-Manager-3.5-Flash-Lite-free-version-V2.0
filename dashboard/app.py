@@ -269,6 +269,17 @@ def discard_ambiguous(item_id: str):
     return {"success": True, "message": "Documento descartado correctamente"}
 
 
+@app.delete("/api/discarded/{item_id}")
+def dismiss_discarded(item_id: str):
+    """Confirma el descarte de un documento y lo retira de la lista de revisión activa."""
+    entry = data_manager.get_history_entry(item_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    
+    data_manager.confirm_discard_and_archive(item_id, delete_file=True)
+    return {"success": True, "message": "Documento descartado y retirado de la lista"}
+
+
 # ── Endpoints de Reglas Memorizadas y Programación ───────────────────────────
 
 @app.get("/api/rules")
@@ -295,11 +306,11 @@ class ScheduleRequest(BaseModel):
 
 @app.get("/api/schedule")
 def get_schedule():
-    return data_manager.load_schedule_config()
+    return scheduler_service.get_schedule_info()
 
 
 @app.post("/api/schedule")
 def update_schedule(req: ScheduleRequest):
     payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
-    saved = data_manager.save_schedule_config(payload)
-    return {"success": True, "schedule": saved}
+    data_manager.save_schedule_config(payload)
+    return {"success": True, "schedule": scheduler_service.get_schedule_info()}
