@@ -17,36 +17,39 @@ Para que el programa funcione en tu ordenador nuevo, la carpeta del proyecto deb
 
 ---
 
-## 🛠️ PASO 1: Instalar los programas necesarios en el nuevo PC
+## 🛠️ PASO 1: Instalar los 2 programas necesarios en el nuevo PC
 
-Antes de descargar el proyecto, tu ordenador necesita tener **Python** y **Git**:
+Para poner en marcha el proyecto sin complicaciones ni comandos raros, solo necesitas dos programas:
 
-1. **Instalar Python:**
-   - Entra en [python.org/downloads](https://www.python.org/downloads/) y descarga la versión recomendada para Windows.
+1. **Instalar Python (El motor que ejecuta el programa):**
+   - Entra en [python.org/downloads](https://www.python.org/downloads/) y descarga la versión para Windows.
    - Abre el instalador descargado.
-   - ⚠️ **MUY IMPORTANTE (EL ERROR MÁS COMÚN):** En la primera pantalla del instalador, marca la casilla que dice:
-     > **☑ Add python.exe to PATH** (abajo del todo).
-   - Haz clic en **Install Now** y espera a que termine.
+   - ⚠️ **EL PASO MÁS IMPORTANTE (NO LO SALTES):** En la primerísima pantalla del instalador, abajo del todo, marca la casilla:
+     > **☑ Add python.exe to PATH**
+   - Pulsa en **Install Now** y espera a que termine.
 
-2. **Instalar Git:**
-   - Entra en [git-scm.com/download/win](https://git-scm.com/download/win) y descárgalo.
-   - Instálalo dejando todas las opciones por defecto (siguiente, siguiente, instalar).
+2. **Instalar GitHub Desktop (La aplicación oficial visual de GitHub):**
+   - Entra en [desktop.github.com](https://desktop.github.com/) y haz clic en **Download for Windows**.
+   - Instálalo y ábrelo.
+   - Inicia sesión con tu cuenta de GitHub (`Sign in to GitHub.com`).
+   - *(¡Listo! Al instalar GitHub Desktop ya no necesitas instalar Git por consola ni aprender comandos de terminal para descargar tus proyectos).*
 
 ---
 
-## 📥 PASO 2: Descargar el proyecto a tu ordenador
+## 📥 PASO 2: Descargar el proyecto con 1 solo clic (GitHub Desktop)
 
-1. Abre la aplicación **PowerShell** o **Símbolo del sistema (cmd)** en Windows.
-2. Escribe dónde quieres guardar la carpeta (por ejemplo, en tus Documentos o en una carpeta de proyectos).
-3. Escribe este comando y pulsa **Enter**:
-   ```bash
-   git clone https://github.com/StormJelly87/Facturas-Manager-3.1-Flash-Lite-free-version-V1.2.git
-   ```
-   *(También puedes entrar al enlace de GitHub en tu navegador, pulsar el botón verde **Code** ➔ **Download ZIP**, y descomprimir la carpeta donde tú quieras).*
-4. Entra en la carpeta descargada:
-   ```bash
-   cd Facturas-Manager-3.1-Flash-Lite-free-version-V1.2
-   ```
+Con GitHub Desktop abierto:
+
+1. Ve al menú superior **File** ➔ **Clone repository...** (o pulsa en **Clone a repository from the Internet...** en la pantalla inicial).
+2. En la pestaña **GitHub.com**, verás la lista de tus repositorios.
+3. Haz clic en **`Facturas-Manager-3.1-Flash-Lite-free-version-V1.2`** (o en la pestaña *URL* pega la dirección del repositorio).
+4. Elige en qué carpeta de tu disco duro quieres guardarlo (por ejemplo en `Documentos`).
+5. Pulsa el botón azul **Clone**.
+6. ¡Listo! El proyecto ya está en tu ordenador.
+
+> 💡 **Atajo desde la web:** Si estás en la web de GitHub en tu navegador, pulsa en el botón verde **Code** ➔ **Open with GitHub Desktop**. Se abrirá el programa directamente listo para clonar.
+> 
+> *(Para abrir la carpeta en el Explorador de Windows en cualquier momento, solo tienes que hacer clic en el botón **Show in Explorer** que aparece en GitHub Desktop).*
 
 ---
 
@@ -54,11 +57,17 @@ Antes de descargar el proyecto, tu ordenador necesita tener **Python** y **Git**
 
 Las librerías son las herramientas que Python necesita para leer PDFs, conectarse a Google y hablar con la inteligencia artificial.
 
-Dentro de la carpeta en PowerShell, escribe:
-```bash
-pip install -r requirements.txt
-```
-Pulsa **Enter** y espera un minuto a que se descarguen e instalen solas.
+Gracias a GitHub Desktop, ni siquiera tienes que escribir rutas de carpetas en la terminal:
+
+1. En GitHub Desktop, ve al menú superior:
+   > **Repository** ➔ **Open in Command Prompt** (o **Open in PowerShell**).  
+   *(Atajo de teclado: `Ctrl + \`\`)*.
+2. Se abrirá la ventana de terminal colocada exactamente en la carpeta del proyecto.
+3. Escribe o pega este comando y pulsa **Enter**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Espera un minuto a que termine la instalación. Deja esa ventana abierta para cuando ejecutemos el script.
 
 ---
 
@@ -188,7 +197,7 @@ Ahora que ya tienes:
 - [x] Archivo `.env` configurado
 - [x] Archivo `credentials.json` colocado en la carpeta
 
-Abre PowerShell en la carpeta del proyecto y ejecuta:
+En la ventana de terminal que abriste desde GitHub Desktop (o pulsando en GitHub Desktop: **Repository** ➔ **Open in Command Prompt**), ejecuta:
 ```bash
 python invoice_manager.py
 ```
