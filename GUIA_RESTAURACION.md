@@ -42,7 +42,7 @@ Con GitHub Desktop abierto:
 
 1. Ve al menú superior **File** ➔ **Clone repository...** (o pulsa en **Clone a repository from the Internet...** en la pantalla inicial).
 2. En la pestaña **GitHub.com**, verás la lista de tus repositorios.
-3. Haz clic en **`Facturas-Manager-3.1-Flash-Lite-free-version-V1.2`** (o en la pestaña *URL* pega la dirección del repositorio).
+3. Haz clic en **`Facturas-Manager-3.5-Flash-Lite-free-version-V2.0`** (o en la pestaña *URL* pega la dirección del repositorio).
 4. Elige en qué carpeta de tu disco duro quieres guardarlo (por ejemplo en `Documentos`).
 5. Pulsa el botón azul **Clone**.
 6. ¡Listo! El proyecto ya está en tu ordenador.

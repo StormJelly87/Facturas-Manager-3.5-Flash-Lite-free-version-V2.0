@@ -1,13 +1,14 @@
 # 📄 Invoice Manager — Gestor Autónomo de Facturas
 
 > 🚑 **¿Has cambiado de ordenador o necesitas reinstalar/restaurar todo desde cero?**  
-> Consulta la **[Guía de Restauración Paso a Paso (Para No Informáticos)](GUIA_RESTAURACION.md)** con instrucciones detalladas, sin tecnicismos y listas de comprobación.
+> Consulta la **[Guía de Restauración Paso a Paso (Para No Informáticos)](GUIA_RESTAURACION.md)** con instrucciones detalladas, sin tecnicismos y listas de comprobación.  
+> 📜 Consulta el **[Historial de Cambios (Changelog)](CHANGELOG.md)** para ver todas las novedades y evolución del proyecto.
 
-Script de Python que automatiza la gestión de facturas con **Gemini**:
+Script de Python que automatiza la gestión de facturas con **Gemini 3.5 Flash-Lite**:
 
 1. **Busca** en Gmail correos no leídos con facturas adjuntas
 2. **Ignora** los correos de proveedores gestionados por otro canal (p. ej. EnvíoMédical)
-3. **Valida** cada adjunto con Gemini 2.5 Flash (anti-falsos positivos)
+3. **Valida** cada adjunto con Gemini 3.5 Flash-Lite (anti-falsos positivos)
 4. **Filtra** documentos que no son facturas reales (albaranes, presupuestos, confirmaciones...)
 5. **Verifica CIF/NIF/VAT** del emisor como requisito obligatorio
 6. **Detecta proveedores Amazon** automáticamente por dominio del remitente
@@ -155,7 +156,7 @@ La **primera vez** se abrirá tu navegador para autorizar el acceso a Google Dri
 2. Busca correos no leídos con "factura", "facturas" o "invoice" + adjunto
 3. Para cada correo encontrado:
    a. Descarga los adjuntos (PDF, PNG, JPG, TIFF, WebP)
-   b. Los envía a Gemini 2.5 Flash para validar:
+   b. Los envía a Gemini 3.5 Flash-Lite para validar:
       - ¿Es una factura real? (descarta albaranes, presupuestos, etc.)
       - Nombre del proveedor
       - CIF/NIF/VAT del emisor
@@ -181,6 +182,7 @@ invoice-manager/
 ├── invoice_manager.py           ← Script principal (Gemini + IMAP + Drive)
 ├── enviomedical_portal.py       ← Módulo Fase 2 (Portal B2B EnvíoMédical)
 ├── GUIA_RESTAURACION.md         ← Guía completa paso a paso para no informáticos
+├── CHANGELOG.md                 ← Historial detallado de versiones y mejoras
 ├── requirements.txt             ← Dependencias de Python
 ├── .env.example                 ← Plantilla de configuración
 ├── .env                         ← Tu configuración con contraseñas (NO se sube a git)
