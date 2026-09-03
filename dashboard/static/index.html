@@ -189,9 +189,9 @@
           </div>
         </div>
 
-        <!-- RESUMEN VISUAL DE FACTURAS DE LA ÚLTIMA SESIÓN -->
+        <!-- RESUMEN VISUAL DE FACTURAS DE LA SESIÓN RECIENTE -->
         <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl overflow-hidden shadow-md">
-          <div class="bg-slate-800 px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+          <div class="bg-slate-800 px-4 py-3 border-b border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div class="flex items-center space-x-2">
               <i class="fa-solid fa-folder-tree text-indigo-400 text-sm"></i>
               <span class="text-sm font-semibold text-slate-200">Facturas y Documentos de la Sesión Reciente</span>
@@ -199,12 +199,27 @@
             <span id="sessionCountText" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300">0 procesados</span>
           </div>
 
-          <div id="sessionTableContainer" class="p-4">
-            <div class="text-center py-6 text-slate-400 space-y-2">
-              <i class="fa-solid fa-circle-info text-2xl text-slate-500"></i>
-              <p class="text-sm">Pulsa <strong>"Ejecutar Ahora"</strong> para procesar los correos de tu bandeja.</p>
-              <p class="text-xs text-slate-500">Aquí verás exactamente qué facturas se han subido, de qué proveedor, y en qué carpeta de Google Drive (Año / Mes / Proveedor) han quedado archivadas.</p>
+          <!-- Barra de Filtros para Sesión Reciente -->
+          <div class="bg-slate-900/60 px-4 py-2.5 border-b border-slate-700/60 flex flex-wrap items-center gap-3">
+            <div class="relative flex-1 min-w-[200px]">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
+              <input type="text" id="sessionSearchInput" oninput="applySessionFiltersAndRender()" placeholder="Filtrar por proveedor o archivo..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
             </div>
+            <div class="w-48">
+              <select id="sessionStatusFilter" onchange="applySessionFiltersAndRender()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="">Todos los estados</option>
+                <option value="SUCCESS">Subidas a Drive ✅</option>
+                <option value="AMBIGUOUS_DATE">Fechas Dudosas ⚠️</option>
+                <option value="DISCARDED">Descartadas 🚫</option>
+              </select>
+            </div>
+            <button onclick="resetSessionFilters()" class="text-xs text-indigo-400 hover:text-indigo-300 hover:underline">
+              Limpiar
+            </button>
+          </div>
+
+          <div id="sessionTableContainer" class="p-0 overflow-x-auto">
+            <!-- Cargado dinámicamente con cabeceras ordenables -->
           </div>
         </div>
 
@@ -274,28 +289,92 @@
 
       <!-- TAB 4: HISTORIAL ÉXITO -->
       <div id="tab-history" class="tab-pane hidden space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 class="text-xl font-bold text-white flex items-center gap-2">
               <i class="fa-solid fa-check-circle text-emerald-400"></i>
               Historial de Facturas Procesadas con Éxito
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Facturas validadas y subidas correctamente a Google Drive con su ruta exacta de archivo.</p>
+            <p class="text-xs text-slate-400 mt-0.5">Facturas validadas y subidas a Google Drive con filtros rápidos y columnas ordenables.</p>
           </div>
-          <button onclick="loadHistory()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
-            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
-          </button>
+          <div class="flex items-center space-x-2">
+            <span id="historyCountBadge" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              0 facturas
+            </span>
+            <button onclick="loadHistory()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+              <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+            </button>
+          </div>
         </div>
 
+        <!-- Barra de Búsqueda y Filtros de Historial -->
+        <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3.5 space-y-3 shadow-sm">
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <!-- Buscador general -->
+            <div class="sm:col-span-5 relative">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+              <input type="text" id="historySearchInput" oninput="applyHistoryFiltersAndRender()" placeholder="Buscar por proveedor, archivo, carpeta..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <!-- Selector de Proveedor -->
+            <div class="sm:col-span-4">
+              <select id="historySupplierFilter" onchange="applyHistoryFiltersAndRender()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="">🏢 Todos los proveedores</option>
+              </select>
+            </div>
+
+            <!-- Selector de Mes / Año -->
+            <div class="sm:col-span-3">
+              <select id="historyMonthFilter" onchange="applyHistoryFiltersAndRender()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="">📅 Todos los meses</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Sub-barra con contador de resultados y botón de reset -->
+          <div class="flex items-center justify-between pt-1 border-t border-slate-700/50 text-xs text-slate-400">
+            <span id="historyFilterResultText">Cargando facturas...</span>
+            <button onclick="resetHistoryFilters()" class="text-indigo-400 hover:text-indigo-300 text-xs hover:underline flex items-center gap-1">
+              <i class="fa-solid fa-filter-circle-xmark"></i> Limpiar filtros
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabla de Historial con Cabeceras Ordenables -->
         <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl overflow-hidden shadow-sm">
           <table class="w-full text-left text-sm text-slate-300">
-            <thead class="bg-slate-800 text-xs uppercase font-semibold text-slate-400 border-b border-slate-700">
+            <thead class="bg-slate-800 text-xs uppercase font-semibold text-slate-400 border-b border-slate-700 select-none">
               <tr>
-                <th class="px-4 py-3">Fecha Emisión</th>
-                <th class="px-4 py-3">Proveedor</th>
-                <th class="px-4 py-3">Archivo</th>
-                <th class="px-4 py-3">Carpeta en Google Drive</th>
-                <th class="px-4 py-3">Fecha de Subida</th>
+                <th onclick="toggleHistorySort('date_str')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
+                  <div class="flex items-center space-x-1.5">
+                    <span>Fecha Emisión</span>
+                    <span id="sortIcon_history_date_str" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
+                  </div>
+                </th>
+                <th onclick="toggleHistorySort('supplier')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
+                  <div class="flex items-center space-x-1.5">
+                    <span>Proveedor</span>
+                    <span id="sortIcon_history_supplier" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
+                  </div>
+                </th>
+                <th onclick="toggleHistorySort('filename')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
+                  <div class="flex items-center space-x-1.5">
+                    <span>Archivo</span>
+                    <span id="sortIcon_history_filename" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
+                  </div>
+                </th>
+                <th onclick="toggleHistorySort('drive_folder_path')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
+                  <div class="flex items-center space-x-1.5">
+                    <span>Carpeta en Google Drive</span>
+                    <span id="sortIcon_history_drive_folder_path" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
+                  </div>
+                </th>
+                <th onclick="toggleHistorySort('created_at')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
+                  <div class="flex items-center space-x-1.5">
+                    <span>Fecha de Subida</span>
+                    <span id="sortIcon_history_created_at" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody id="historyTableBody" class="divide-y divide-slate-700/50">
@@ -607,28 +686,98 @@
       }
     }
 
+    let sessionRawItems = [];
+    let sessionSortCol = 'supplier';
+    let sessionSortAsc = true;
+
     function renderSessionSummary(items) {
+      if (!items || items.length === 0) return;
+      sessionRawItems = items;
+      applySessionFiltersAndRender();
+    }
+
+    function toggleSessionSort(col) {
+      if (sessionSortCol === col) {
+        sessionSortAsc = !sessionSortAsc;
+      } else {
+        sessionSortCol = col;
+        sessionSortAsc = true;
+      }
+      applySessionFiltersAndRender();
+    }
+
+    function resetSessionFilters() {
+      const sInput = document.getElementById('sessionSearchInput');
+      const stFilter = document.getElementById('sessionStatusFilter');
+      if (sInput) sInput.value = '';
+      if (stFilter) stFilter.value = '';
+      applySessionFiltersAndRender();
+    }
+
+    function applySessionFiltersAndRender() {
       const container = document.getElementById('sessionTableContainer');
       const countBadge = document.getElementById('sessionCountText');
-      if (!items || items.length === 0) {
+      if (!container) return;
+
+      const q = (document.getElementById('sessionSearchInput')?.value || '').toLowerCase().trim();
+      const st = document.getElementById('sessionStatusFilter')?.value || '';
+
+      let filtered = sessionRawItems.filter(item => {
+        if (st && item.status !== st) return false;
+        if (q) {
+          const text = `${item.supplier} ${item.filename} ${item.drive_folder_path || ''} ${item.reason || ''}`.toLowerCase();
+          if (!text.includes(q)) return false;
+        }
+        return true;
+      });
+
+      filtered.sort((a, b) => {
+        let valA = a[sessionSortCol] || '';
+        let valB = b[sessionSortCol] || '';
+        if (typeof valA === 'string') valA = valA.toLowerCase();
+        if (typeof valB === 'string') valB = valB.toLowerCase();
+        return sessionSortAsc ? (valA > valB ? 1 : (valA < valB ? -1 : 0)) : (valA < valB ? 1 : (valA > valB ? -1 : 0));
+      });
+
+      if (countBadge) {
+        countBadge.textContent = `${filtered.length} de ${sessionRawItems.length} documento(s)`;
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="p-6 text-center text-xs text-slate-400">
+            No hay documentos en esta sesión que coincidan con los filtros.
+          </div>
+        `;
         return;
       }
 
-      countBadge.textContent = `${items.length} procesado(s)`;
+      const getIcon = (col) => {
+        if (sessionSortCol !== col) return '<i class="fa-solid fa-sort text-slate-600"></i>';
+        return sessionSortAsc ? '<i class="fa-solid fa-arrow-down-a-z text-indigo-400"></i>' : '<i class="fa-solid fa-arrow-up-z-a text-indigo-400"></i>';
+      };
 
       container.innerHTML = `
         <table class="w-full text-left text-xs text-slate-300">
-          <thead class="bg-slate-800 text-[11px] uppercase font-semibold text-slate-400 border-b border-slate-700">
+          <thead class="bg-slate-800 text-[11px] uppercase font-semibold text-slate-400 border-b border-slate-700 select-none">
             <tr>
-              <th class="px-4 py-2.5">Documento / Asunto</th>
-              <th class="px-4 py-2.5">Proveedor</th>
-              <th class="px-4 py-2.5">Destino en Google Drive</th>
-              <th class="px-4 py-2.5">Estado</th>
+              <th onclick="toggleSessionSort('filename')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
+                <div class="flex items-center space-x-1.5"><span>Documento / Asunto</span> <span>${getIcon('filename')}</span></div>
+              </th>
+              <th onclick="toggleSessionSort('supplier')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
+                <div class="flex items-center space-x-1.5"><span>Proveedor</span> <span>${getIcon('supplier')}</span></div>
+              </th>
+              <th onclick="toggleSessionSort('drive_folder_path')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
+                <div class="flex items-center space-x-1.5"><span>Destino en Google Drive</span> <span>${getIcon('drive_folder_path')}</span></div>
+              </th>
+              <th onclick="toggleSessionSort('status')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
+                <div class="flex items-center space-x-1.5"><span>Estado</span> <span>${getIcon('status')}</span></div>
+              </th>
               <th class="px-4 py-2.5 text-right">Acción</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-700/50">
-            ${items.map(item => {
+            ${filtered.map(item => {
               let statusBadge = '';
               let destText = '';
               let actionBtn = '';
@@ -1016,33 +1165,190 @@
       }
     }
 
-    // ── Carga de Historial de Éxito ─────────────────────────────────────────
+    // ── Carga de Historial de Éxito con Filtros y Ordenación ───────────────
+    let historyRawItems = [];
+    let historySortCol = 'date_str';
+    let historySortAsc = false; // Más recientes primero por defecto
+
+    const SPANISH_MONTHS = {
+      '01': 'Enero', '02': 'Febrero', '03': 'Marzo', '04': 'Abril',
+      '05': 'Mayo', '06': 'Junio', '07': 'Julio', '08': 'Agosto',
+      '09': 'Septiembre', '10': 'Octubre', '11': 'Noviembre', '12': 'Diciembre'
+    };
+
+    function parseMonthYearSortKey(dateStr) {
+      if (!dateStr || typeof dateStr !== 'string') return 0;
+      const parts = dateStr.split('-');
+      if (parts.length === 2) {
+        const m = parseInt(parts[0], 10) || 0;
+        let y = parseInt(parts[1], 10) || 0;
+        if (y < 100) y += 2000;
+        return y * 100 + m;
+      }
+      return 0;
+    }
+
+    function formatMonthLabel(mStr) {
+      if (!mStr || !mStr.includes('-')) return mStr || '-';
+      const [mm, yy] = mStr.split('-');
+      const name = SPANISH_MONTHS[mm] || mm;
+      const year = yy.length === 2 ? `20${yy}` : yy;
+      return `${name} ${year} (${mStr})`;
+    }
+
     async function loadHistory() {
       const tbody = document.getElementById('historyTableBody');
-      tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-slate-400 text-center">Cargando historial...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-slate-400 text-center">Cargando historial de facturas...</td></tr>';
 
       try {
         const res = await fetch('/api/history');
-        const items = await res.json();
+        historyRawItems = await res.json();
 
-        if (items.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-slate-400 text-center">Aún no hay facturas procesadas registradas en el historial.</td></tr>';
-          return;
+        // Actualizar opciones del selector de proveedores
+        const suppSelect = document.getElementById('historySupplierFilter');
+        if (suppSelect) {
+          const prevSupp = suppSelect.value;
+          const suppliers = Array.from(new Set(historyRawItems.map(i => i.supplier).filter(Boolean))).sort();
+          suppSelect.innerHTML = '<option value="">🏢 Todos los proveedores (' + suppliers.length + ')</option>' +
+            suppliers.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+          if (suppliers.includes(prevSupp)) suppSelect.value = prevSupp;
         }
 
-        tbody.innerHTML = items.map(item => `
-          <tr class="hover:bg-slate-800/50 transition">
-            <td class="px-4 py-3 font-medium text-slate-200">${item.date_str || '-'}</td>
-            <td class="px-4 py-3 font-semibold text-white">${escapeHtml(item.supplier)}</td>
-            <td class="px-4 py-3 text-xs text-slate-300 truncate max-w-xs">${escapeHtml(item.filename)}</td>
-            <td class="px-4 py-3 text-xs font-mono text-emerald-400"><i class="fa-regular fa-folder mr-1"></i> ${escapeHtml(item.drive_folder_path || '-')}</td>
-            <td class="px-4 py-3 text-xs text-slate-400">${item.created_at ? item.created_at.replace('T', ' ') : '-'}</td>
-          </tr>
-        `).join('');
+        // Actualizar opciones del selector de meses (ordenados de más recientes a más antiguos)
+        const monthSelect = document.getElementById('historyMonthFilter');
+        if (monthSelect) {
+          const prevMonth = monthSelect.value;
+          const months = Array.from(new Set(historyRawItems.map(i => i.date_str).filter(Boolean)))
+            .sort((a, b) => parseMonthYearSortKey(b) - parseMonthYearSortKey(a));
+          monthSelect.innerHTML = '<option value="">📅 Todos los meses (' + months.length + ')</option>' +
+            months.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(formatMonthLabel(m))}</option>`).join('');
+          if (months.includes(prevMonth)) monthSelect.value = prevMonth;
+        }
 
+        applyHistoryFiltersAndRender();
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-rose-400 text-center">Error al cargar historial.</td></tr>';
       }
+    }
+
+    function toggleHistorySort(col) {
+      if (historySortCol === col) {
+        historySortAsc = !historySortAsc;
+      } else {
+        historySortCol = col;
+        historySortAsc = (col === 'supplier' || col === 'filename' || col === 'drive_folder_path');
+      }
+      applyHistoryFiltersAndRender();
+    }
+
+    function resetHistoryFilters() {
+      const sInput = document.getElementById('historySearchInput');
+      const suppFilter = document.getElementById('historySupplierFilter');
+      const mFilter = document.getElementById('historyMonthFilter');
+      if (sInput) sInput.value = '';
+      if (suppFilter) suppFilter.value = '';
+      if (mFilter) mFilter.value = '';
+      applyHistoryFiltersAndRender();
+    }
+
+    function applyHistoryFiltersAndRender() {
+      const tbody = document.getElementById('historyTableBody');
+      const countBadge = document.getElementById('historyCountBadge');
+      const resultText = document.getElementById('historyFilterResultText');
+      if (!tbody) return;
+
+      const q = (document.getElementById('historySearchInput')?.value || '').toLowerCase().trim();
+      const selSupp = document.getElementById('historySupplierFilter')?.value || '';
+      const selMonth = document.getElementById('historyMonthFilter')?.value || '';
+
+      // 1. Filtrar
+      let filtered = historyRawItems.filter(item => {
+        if (selSupp && item.supplier !== selSupp) return false;
+        if (selMonth && item.date_str !== selMonth) return false;
+        if (q) {
+          const text = `${item.supplier} ${item.filename} ${item.date_str} ${item.drive_folder_path || ''}`.toLowerCase();
+          if (!text.includes(q)) return false;
+        }
+        return true;
+      });
+
+      // 2. Ordenar
+      filtered.sort((a, b) => {
+        if (historySortCol === 'date_str') {
+          const kA = parseMonthYearSortKey(a.date_str);
+          const kB = parseMonthYearSortKey(b.date_str);
+          return historySortAsc ? kA - kB : kB - kA;
+        } else if (historySortCol === 'created_at') {
+          const tA = new Date(a.created_at || 0).getTime();
+          const tB = new Date(b.created_at || 0).getTime();
+          return historySortAsc ? tA - tB : tB - tA;
+        } else {
+          const vA = (a[historySortCol] || '').toLowerCase();
+          const vB = (b[historySortCol] || '').toLowerCase();
+          return historySortAsc ? vA.localeCompare(vB) : vB.localeCompare(vA);
+        }
+      });
+
+      // 3. Actualizar textos de contadores
+      if (countBadge) {
+        countBadge.textContent = `${historyRawItems.length} facturas`;
+      }
+      if (resultText) {
+        if (filtered.length === historyRawItems.length) {
+          resultText.textContent = `Mostrando todas las ${filtered.length} facturas registradas.`;
+        } else {
+          resultText.innerHTML = `Mostrando <strong>${filtered.length}</strong> de ${historyRawItems.length} facturas filtradas.`;
+        }
+      }
+
+      // 4. Actualizar iconos de cabeceras
+      ['date_str', 'supplier', 'filename', 'drive_folder_path', 'created_at'].forEach(col => {
+        const iconEl = document.getElementById(`sortIcon_history_${col}`);
+        if (!iconEl) return;
+        if (historySortCol === col) {
+          iconEl.className = 'text-[11px] text-indigo-400 font-bold';
+          iconEl.innerHTML = historySortAsc
+            ? '<i class="fa-solid fa-arrow-up-short-wide"></i>'
+            : '<i class="fa-solid fa-arrow-down-wide-short"></i>';
+        } else {
+          iconEl.className = 'text-[11px] text-slate-600';
+          iconEl.innerHTML = '<i class="fa-solid fa-sort"></i>';
+        }
+      });
+
+      // 5. Renderizar filas
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="px-4 py-8 text-center text-slate-400 space-y-2">
+              <i class="fa-solid fa-filter-circle-xmark text-2xl text-slate-500"></i>
+              <div class="text-sm font-medium text-slate-300">No se encontraron facturas que coincidan con la búsqueda.</div>
+              <div class="text-xs text-slate-500">Prueba a seleccionar otro mes, proveedor o pulsa 'Limpiar filtros'.</div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(item => `
+        <tr class="hover:bg-slate-800/50 transition">
+          <td class="px-4 py-3 font-semibold text-indigo-300 whitespace-nowrap">
+            ${escapeHtml(formatMonthLabel(item.date_str))}
+          </td>
+          <td class="px-4 py-3 font-bold text-white">
+            ${escapeHtml(item.supplier)}
+          </td>
+          <td class="px-4 py-3 text-xs text-slate-300 font-mono max-w-xs truncate" title="${escapeHtml(item.filename)}">
+            ${escapeHtml(item.filename)}
+          </td>
+          <td class="px-4 py-3 text-xs font-mono text-emerald-400 font-medium">
+            <i class="fa-regular fa-folder mr-1"></i> ${escapeHtml(item.drive_folder_path || '-')}
+          </td>
+          <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+            ${item.created_at ? item.created_at.replace('T', ' ').slice(0, 16) : '-'}
+          </td>
+        </tr>
+      `).join('');
     }
 
     // ── Carga de Reglas Aprendidas ──────────────────────────────────────────
