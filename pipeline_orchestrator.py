@@ -37,16 +37,6 @@ def get_pipeline_state() -> dict:
     with _LOCK:
         state = _STATE.copy()
         state["stats"] = data_manager.get_stats()
-        if not state.get("session_summary"):
-            # Mostrar los documentos más recientes procesados
-            state["session_summary"] = data_manager.get_history(limit=15)
-        if not state.get("logs"):
-            ts = datetime.now().strftime("%H:%M:%S")
-            state["logs"] = [
-                f"[{ts}] [INFO] Sistema de gesti\u00f3n y control de calidad listo.",
-                f"[{ts}] [SUCCESS] Facturas indexadas en el historial local y Google Drive.",
-                f"[{ts}] [INFO] Conexi\u00f3n con Gemini 3.5 Flash-Lite y Google Drive verificada.",
-            ]
         return state
 
 

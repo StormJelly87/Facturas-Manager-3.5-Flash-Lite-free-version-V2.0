@@ -691,7 +691,22 @@
     let sessionSortAsc = true;
 
     function renderSessionSummary(items) {
-      if (!items || items.length === 0) return;
+      if (!items || items.length === 0) {
+        sessionRawItems = [];
+        const container = document.getElementById('sessionTableContainer');
+        const countBadge = document.getElementById('sessionCountText');
+        if (countBadge) countBadge.textContent = '0 procesados';
+        if (container) {
+          container.innerHTML = `
+            <div class="text-center py-6 text-slate-400 space-y-2">
+              <i class="fa-solid fa-circle-info text-2xl text-slate-500"></i>
+              <p class="text-sm">Pulsa <strong>"Ejecutar Ahora"</strong> para procesar los correos de tu bandeja.</p>
+              <p class="text-xs text-slate-500">Aquí verás exactamente qué facturas se han subido, de qué proveedor, y en qué carpeta de Google Drive (Año / Mes / Proveedor) han quedado archivadas.</p>
+            </div>
+          `;
+        }
+        return;
+      }
       sessionRawItems = items;
       applySessionFiltersAndRender();
     }
