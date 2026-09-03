@@ -1,0 +1,8 @@
+{
+  "aliases": {
+    "RAZON SOCIAL FISCAL": "NOMBRE COMERCIAL DESEADO"
+  },
+  "tax_id_map": {
+    "ESB12345678": "NOMBRE COMERCIAL DESEADO"
+  }
+}
