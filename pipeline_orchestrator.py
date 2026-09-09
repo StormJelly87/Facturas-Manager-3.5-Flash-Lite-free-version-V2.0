@@ -37,6 +37,9 @@ def get_pipeline_state() -> dict:
     with _LOCK:
         state = _STATE.copy()
         state["stats"] = data_manager.get_stats()
+        if not state.get("session_summary"):
+            # Panel recién abierto (sin sesión): mostrar las últimas del historial persistente
+            state["session_summary"] = data_manager.get_history(limit=15)
         return state
 
 
@@ -126,10 +129,16 @@ def _execute_pipeline_worker() -> None:
         new_entries = [e for e in current_entries if e["id"] not in initial_ids]
 
         ok_count = sum(1 for e in new_entries if e.get("status") == "SUCCESS")
+        dup_count = sum(1 for e in new_entries if e.get("status") == "SKIPPED_DUPLICATE")
         amb_count = sum(1 for e in new_entries if e.get("status") == "AMBIGUOUS_DATE")
         disc_count = sum(1 for e in new_entries if e.get("status") == "DISCARDED")
 
-        summary_line = f"Fin de ciclo: {ok_count} facturas archivadas en Drive, {amb_count} dudosas, {disc_count} descartadas."
+        parts = [f"{ok_count} facturas archivadas en Drive"]
+        if dup_count > 0:
+            parts.append(f"{dup_count} duplicado(s) omitido(s) (ya estaban en Drive)")
+        parts.append(f"{amb_count} dudosas")
+        parts.append(f"{disc_count} descartadas")
+        summary_line = f"Fin de ciclo: " + ", ".join(parts) + "."
         _append_log(summary_line, "SUCCESS" if ok_count > 0 else "INFO")
 
         with _LOCK:

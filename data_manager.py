@@ -51,7 +51,7 @@ def _save_history_raw(entries: list[dict]) -> None:
 
 
 def add_history_entry(
-    status: str,  # "SUCCESS", "DISCARDED", "AMBIGUOUS_DATE"
+    status: str,  # "SUCCESS", "DISCARDED", "AMBIGUOUS_DATE", "SKIPPED_DUPLICATE"
     filename: str,
     supplier: str,
     date_str: str,

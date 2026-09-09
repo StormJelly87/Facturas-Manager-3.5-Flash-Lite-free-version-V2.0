@@ -6,6 +6,30 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [2.2.0] - 2026-09-06
+
+### 🚀 Novedades Principales
+- **Columna de Importe en el Panel:**
+  - Nueva columna "Importe" (coste total del documento) en las tablas de **Sesión Reciente** e **Historial Éxito**, con formato español (`543,13 €`) y ordenación numérica real.
+  - **Extracción automática del importe:** Gemini ahora devuelve el `importe_total` de cada factura de Gmail; las del portal EnvíoMédical ya lo tomaban de la tabla del portal.
+  - **Sesión Reciente persistente:** al abrir el panel sin ejecución previa, muestra las últimas 15 entradas del historial en lugar de quedar vacío.
+- **Registro Honesto de Duplicados (estado `SKIPPED_DUPLICATE`):**
+  - Nueva etiqueta **"Ya estaba en Drive ⏭️"** para facturas detectadas como duplicado: ya no se registran como "Subida a Drive ✅" ni engordan las estadísticas de éxito.
+  - Nuevo filtro **"Duplicados omitidos ⏭️"** en el selector de estados de la sesión.
+  - El resumen de fin de ciclo detalla explícitamente los duplicados omitidos ("X facturas archivadas, Y duplicados omitidos...").
+- **Anti-duplicados reforzado en el portal EnvíoMédical (por ID de factura):**
+  - El portal regenera el PDF en cada descarga (los bytes cambian), por lo que la comparación MD5 nunca coincidía y las facturas volvían a subirse como `"(1)"`.
+  - Ahora, **antes de descargar nada**, se comprueba si el número de factura ya existe en la carpeta de Drive (original o cualquier sufijo `(n)`); si existe, se omite por completo: ni descarga ni subida.
+  - Esto hace el sistema resiliente incluso si se pierde el archivo de estado local `enviomedical_state.json`.
+
+### 🐛 Correcciones y Mejoras
+- **Error latente corregido (`supplier_id` sin definir):** la sincronización del portal habría fallado siempre con la primera factura nueva al usar `get_or_create_supplier_folder`.
+- **Etiquetas de estado recortadas:** los badges de la columna Estado ("Subida a Drive ✅", "Descartada 🚫") ya no se parten en dos líneas; ocupan siempre una sola línea.
+- **Historial completo en el panel:** la carga del Historial Éxito ahora pide hasta 5000 registros (antes se limitaba a 100 silenciosamente).
+- **Herramientas de simulación restauradas:** `simulacion_manager.py` con `Generar_Simulacion_Test.bat` (20 proveedores × 20 facturas = 400, con importes) y `Borrar_Simulacion_Limpiar.bat` (restaura los datos reales) para probar el panel sin tocar datos reales.
+
+---
+
 ## [2.1.0] - 2026-09-03
 
 ### 🚀 Novedades Principales

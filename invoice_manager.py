@@ -619,7 +619,8 @@ Responde UNICAMENTE con un objeto JSON valido, sin markdown ni texto adicional.
   "is_invoice": "SI o NO",
   "supplier": "Nombre del proveedor o empresa que emite la factura",
   "tax_id": "CIF, NIF o VAT ID del emisor de la factura",
-  "date": "Fecha de la factura en formato YYYY-MM-DD (ejemplo: 2026-02-10 para el 10 de febrero de 2026)"
+  "date": "Fecha de la factura en formato YYYY-MM-DD (ejemplo: 2026-02-10 para el 10 de febrero de 2026)",
+  "importe_total": "Importe TOTAL del documento, es decir la cantidad final a pagar con todos los impuestos ya sumados. Solo el numero con decimales y punto (ejemplo: 543.13). Toma el TOTAL final de la factura, no la base. Si no lo encuentras, usa null"
 }
 
 Reglas:
@@ -921,10 +922,22 @@ Responde estrictamente con un objeto JSON:
         # Doble comprobación: log del día, mes y carpeta destino
         log(f"  [FECHA] Procesando dia: {dt.strftime('%d')}, mes: {dt.strftime('%m')}. Carpeta destino: {date_str}")
 
+        # Importe total del documento (para el historial del panel)
+        amount_val = None
+        raw_amount = result.get("importe_total")
+        if raw_amount not in (None, "", "null"):
+            try:
+                amount_val = float(str(raw_amount).replace("€", "").replace(" ", "").replace(",", "."))
+            except (ValueError, TypeError):
+                amount_val = None
+        if amount_val is not None:
+            log(f"  [IMPORTE] Total del documento: {amount_val:.2f} EUR")
+
         log(f"  [SI] Factura confirmada -- Proveedor: {supplier} | CIF: {tax_id} | Fecha: {date_str}")
         return {
             "supplier": supplier,
             "date": date_str,
+            "amount": amount_val,
             "is_ambiguous": is_ambiguous,
             "ambiguous_options": ambiguous_options,
         }
@@ -1325,28 +1338,50 @@ def process_invoice(
             drive_file_id = upload_to_drive(drive_service, filepath, supplier_folder_id)
             is_ambiguous = info.get("is_ambiguous", False)
             folder_path_str = f"{year_folder} / {month_folder_name} / {supplier_name}"
-            
-            if is_ambiguous:
-                log(f"  [DUDOSA] ⚠️ Factura '{os.path.basename(filepath)}' de {supplier_name} con fecha ambigua -> Guardada provisionalmente en '{folder_path_str}' y añadida a 'Facturas Dudosas'.", "WARN")
-            else:
-                log(f"  [SUCCESS] [DRIVE] ✅ Factura archivada con éxito: '{os.path.basename(filepath)}' de {supplier_name} -> Carpeta: {folder_path_str}", "SUCCESS")
 
+            # Si upload_to_drive devuelve None, es un duplicado exacto (mismo nombre
+            # y mismo contenido MD5 ya presentes en Drive). Se registra con HONESTIDAD:
+            # NO cuenta como subida nueva.
             try:
                 import data_manager
-                status_to_record = "AMBIGUOUS_DATE" if is_ambiguous else "SUCCESS"
-                data_manager.add_history_entry(
-                    status=status_to_record,
-                    filename=os.path.basename(filepath),
-                    supplier=supplier_name,
-                    date_str=date_str,
-                    drive_file_id=drive_file_id,
-                    drive_folder_id=supplier_folder_id,
-                    drive_folder_path=folder_path_str,
-                    original_filepath=filepath,
-                    email_subject=subject,
-                    sender=sender,
-                    detected_dates=info.get("ambiguous_options", []),
-                )
+                if drive_file_id is None:
+                    log(f"  [DUPLICADO] ⏭️ Factura '{os.path.basename(filepath)}' de {supplier_name} ya estaba en Google Drive ({folder_path_str}). No se ha vuelto a subir.", "WARN")
+                    data_manager.add_history_entry(
+                        status="SKIPPED_DUPLICATE",
+                        filename=os.path.basename(filepath),
+                        supplier=supplier_name,
+                        date_str=date_str,
+                        drive_file_id=None,
+                        drive_folder_id=supplier_folder_id,
+                        drive_folder_path=folder_path_str,
+                        original_filepath=filepath,
+                        email_subject=subject,
+                        sender=sender,
+                        detected_dates=info.get("ambiguous_options", []),
+                        amount=info.get("amount"),
+                        reason="Ya existía en Drive (mismo nombre y contenido MD5). Subida omitida.",
+                    )
+                else:
+                    if is_ambiguous:
+                        log(f"  [DUDOSA] ⚠️ Factura '{os.path.basename(filepath)}' de {supplier_name} con fecha ambigua -> Guardada provisionalmente en '{folder_path_str}' y añadida a 'Facturas Dudosas'.", "WARN")
+                    else:
+                        log(f"  [SUCCESS] [DRIVE] ✅ Factura archivada con éxito: '{os.path.basename(filepath)}' de {supplier_name} -> Carpeta: {folder_path_str}", "SUCCESS")
+
+                    status_to_record = "AMBIGUOUS_DATE" if is_ambiguous else "SUCCESS"
+                    data_manager.add_history_entry(
+                        status=status_to_record,
+                        filename=os.path.basename(filepath),
+                        supplier=supplier_name,
+                        date_str=date_str,
+                        drive_file_id=drive_file_id,
+                        drive_folder_id=supplier_folder_id,
+                        drive_folder_path=folder_path_str,
+                        original_filepath=filepath,
+                        email_subject=subject,
+                        sender=sender,
+                        detected_dates=info.get("ambiguous_options", []),
+                        amount=info.get("amount"),
+                    )
             except Exception as e_dm:
                 log(f"  [WARN] Fallo al registrar historial: {e_dm}")
 
@@ -1416,15 +1451,13 @@ def process_enviomedical(drive_service, tmp_dir: str) -> None:
     log(f"{len(pending)} factura(s) nueva(s) por procesar.")
     supplier_name = sanitize_folder_name(ENVIO_SUPPLIER_NAME)
 
-    ok, fail = 0, 0
+    ok, fail, dup = 0, 0, 0
     MAX_DRIVE_RETRIES = 3
     for inv in pending:
         log(f"\n  Factura {inv['id']} | {inv['fecha'].strftime('%d/%m/%Y')} | {inv['importe']} €")
         pdf_path = os.path.join(tmp_dir, f"{inv['id']}.pdf")
         for attempt in range(1, MAX_DRIVE_RETRIES + 1):
             try:
-                portal.download_pdf(inv["serie"], inv["docum"], inv["tipodoc"], pdf_path)
-
                 # Estructura Año / MM-YY / PROVEEDOR (idéntica al flujo de Gmail)
                 year_folder  = inv["fecha"].strftime("%Y")
                 month_folder = inv["fecha"].strftime("%m-%y")
@@ -1432,20 +1465,82 @@ def process_enviomedical(drive_service, tmp_dir: str) -> None:
 
                 year_id     = get_or_create_folder(drive_service, year_folder, DRIVE_ROOT_ID)
                 month_id    = get_or_create_folder(drive_service, month_folder, year_id)
+                supplier_id = get_or_create_supplier_folder(drive_service, supplier_name, month_id)
+
+                # Anti-duplicado por ID de factura: el portal regenera el PDF en cada
+                # descarga (los bytes cambian), así que la comparación MD5 de
+                # upload_to_drive nunca coincide. Si el ID de la factura ya aparece
+                # en el nombre de un archivo de la carpeta (original o "(1)"),
+                # la factura ya está archivada: no se descarga ni se vuelve a subir.
+                folder_files = drive_service.files().list(
+                    q=f"'{supplier_id}' in parents and trashed = false",
+                    spaces="drive",
+                    fields="files(id, name)",
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                    corpora="allDrives",
+                ).execute().get("files", [])
+                ya_esta = next(
+                    (f for f in folder_files
+                     if f["name"] == f"{inv['id']}.pdf" or f["name"].startswith(f"{inv['id']} (")),
+                    None,
+                )
+                if ya_esta:
+                    log(f"  [DUPLICADO] ⏭️ {inv['id']} ya está en Drive como '{ya_esta['name']}'. No se descarga ni se vuelve a subir.", "WARN")
+                    try:
+                        import data_manager
+                        data_manager.add_history_entry(
+                            status="SKIPPED_DUPLICATE",
+                            filename=f"{inv['id']}.pdf",
+                            supplier=supplier_name,
+                            date_str=month_folder,
+                            drive_folder_id=supplier_id,
+                            drive_folder_path=f"{year_folder}/{month_folder}/{supplier_name}",
+                            amount=inv.get("importe"),
+                            reason=f"Ya existía en Drive como '{ya_esta['name']}'. Descarga y subida omitidas.",
+                        )
+                    except Exception:
+                        pass
+                    state["processed"][inv["id"]] = {
+                        "fecha": inv["fecha"].strftime("%Y-%m-%d"),
+                        "importe": inv["importe"],
+                        "subido": datetime.now().isoformat(timespec="seconds"),
+                    }
+                    save_state(state)
+                    dup += 1
+                    break
+
+                portal.download_pdf(inv["serie"], inv["docum"], inv["tipodoc"], pdf_path)
+
                 uploaded_id = upload_to_drive(drive_service, pdf_path, supplier_id)
                 try:
                     import data_manager
-                    data_manager.add_history_entry(
-                        status="SUCCESS",
-                        filename=f"{inv['id']}.pdf",
-                        supplier=supplier_name,
-                        date_str=month_folder,
-                        drive_file_id=uploaded_id,
-                        drive_folder_id=supplier_id,
-                        drive_folder_path=f"{year_folder}/{month_folder}/{supplier_name}",
-                        amount=inv.get("importe"),
-                        reason="Descargado automáticamente del portal B2B",
-                    )
+                    if uploaded_id is None:
+                        # Duplicado exacto en Drive: se registra con honestidad.
+                        log(f"  [DUPLICADO] ⏭️ {inv['id']}.pdf ya estaba en Google Drive. No se ha vuelto a subir.", "WARN")
+                        data_manager.add_history_entry(
+                            status="SKIPPED_DUPLICATE",
+                            filename=f"{inv['id']}.pdf",
+                            supplier=supplier_name,
+                            date_str=month_folder,
+                            drive_file_id=None,
+                            drive_folder_id=supplier_id,
+                            drive_folder_path=f"{year_folder}/{month_folder}/{supplier_name}",
+                            amount=inv.get("importe"),
+                            reason="Ya existía en Drive (mismo nombre y contenido MD5). Subida omitida.",
+                        )
+                    else:
+                        data_manager.add_history_entry(
+                            status="SUCCESS",
+                            filename=f"{inv['id']}.pdf",
+                            supplier=supplier_name,
+                            date_str=month_folder,
+                            drive_file_id=uploaded_id,
+                            drive_folder_id=supplier_id,
+                            drive_folder_path=f"{year_folder}/{month_folder}/{supplier_name}",
+                            amount=inv.get("importe"),
+                            reason="Descargado automáticamente del portal B2B",
+                        )
                 except Exception:
                     pass
 
@@ -1483,7 +1578,7 @@ def process_enviomedical(drive_service, tmp_dir: str) -> None:
     state["last_run"] = datetime.now().isoformat(timespec="seconds")
     save_state(state)
 
-    log(f"\nEnvíoMédical completado: {ok} subida(s), {fail} error(es).")
+    log(f"\nEnvíoMédical completado: {ok} subida(s), {dup} duplicado(s) omitido(s), {fail} error(es).")
     if fail:
         log("Las facturas con error se reintentarán en la próxima ejecución.", "WARN")
 

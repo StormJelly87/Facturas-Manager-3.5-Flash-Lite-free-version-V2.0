@@ -209,6 +209,7 @@
               <select id="sessionStatusFilter" onchange="applySessionFiltersAndRender()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
                 <option value="">Todos los estados</option>
                 <option value="SUCCESS">Subidas a Drive ✅</option>
+                <option value="SKIPPED_DUPLICATE">Duplicados omitidos ⏭️</option>
                 <option value="AMBIGUOUS_DATE">Fechas Dudosas ⚠️</option>
                 <option value="DISCARDED">Descartadas 🚫</option>
               </select>
@@ -355,6 +356,12 @@
                   <div class="flex items-center space-x-1.5">
                     <span>Proveedor</span>
                     <span id="sortIcon_history_supplier" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
+                  </div>
+                </th>
+                <th onclick="toggleHistorySort('amount')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
+                  <div class="flex items-center space-x-1.5">
+                    <span>Importe</span>
+                    <span id="sortIcon_history_amount" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
                   </div>
                 </th>
                 <th onclick="toggleHistorySort('filename')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
@@ -690,6 +697,13 @@
     let sessionSortCol = 'supplier';
     let sessionSortAsc = true;
 
+    function fmtAmount(v) {
+      if (v === null || v === undefined || v === '' || v === 'null') return '<span class="text-slate-500">—</span>';
+      const n = parseFloat(v);
+      if (isNaN(n)) return escapeHtml(String(v));
+      return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    }
+
     function renderSessionSummary(items) {
       if (!items || items.length === 0) {
         sessionRawItems = [];
@@ -747,6 +761,12 @@
       });
 
       filtered.sort((a, b) => {
+        if (sessionSortCol === 'amount') {
+          const nA = parseFloat(a.amount); const nB = parseFloat(b.amount);
+          const kA = isNaN(nA) ? -Infinity : nA;
+          const kB = isNaN(nB) ? -Infinity : nB;
+          return sessionSortAsc ? kA - kB : kB - kA;
+        }
         let valA = a[sessionSortCol] || '';
         let valB = b[sessionSortCol] || '';
         if (typeof valA === 'string') valA = valA.toLowerCase();
@@ -782,6 +802,9 @@
               <th onclick="toggleSessionSort('supplier')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
                 <div class="flex items-center space-x-1.5"><span>Proveedor</span> <span>${getIcon('supplier')}</span></div>
               </th>
+              <th onclick="toggleSessionSort('amount')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
+                <div class="flex items-center justify-end space-x-1.5"><span>Importe</span> <span>${getIcon('amount')}</span></div>
+              </th>
               <th onclick="toggleSessionSort('drive_folder_path')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
                 <div class="flex items-center space-x-1.5"><span>Destino en Google Drive</span> <span>${getIcon('drive_folder_path')}</span></div>
               </th>
@@ -798,15 +821,19 @@
               let actionBtn = '';
 
               if (item.status === 'SUCCESS') {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">Subida a Drive ✅</span>';
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold whitespace-nowrap">Subida a Drive ✅</span>';
                 destText = `<span class="font-mono text-emerald-400 font-medium"><i class="fa-regular fa-folder mr-1"></i> ${escapeHtml(item.drive_folder_path || '-')}</span>`;
                 actionBtn = '<span class="text-slate-400">Archivada</span>';
+              } else if (item.status === 'SKIPPED_DUPLICATE') {
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold whitespace-nowrap">Ya estaba en Drive ⏭️</span>';
+                destText = `<span class="font-mono text-sky-400/90"><i class="fa-regular fa-folder mr-1"></i> ${escapeHtml(item.drive_folder_path || '-')} (ya existía, no se ha vuelto a subir)</span>`;
+                actionBtn = '<span class="text-slate-400">Omitida (duplicado)</span>';
               } else if (item.status === 'AMBIGUOUS_DATE') {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">Fecha Dudosa ⚠️</span>';
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold whitespace-nowrap">Fecha Dudosa ⚠️</span>';
                 destText = `<span class="font-mono text-amber-400/90">${escapeHtml(item.drive_folder_path || item.date_str)} (Provisional)</span>`;
                 actionBtn = `<button onclick="switchTab('ambiguous')" class="text-indigo-400 hover:underline">Resolver fecha &rarr;</button>`;
               } else {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold">Descartada 🚫</span>';
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold whitespace-nowrap">Descartada 🚫</span>';
                 destText = `<span class="text-slate-400 italic">${escapeHtml(item.reason || 'No es factura legal con CIF')}</span>`;
                 actionBtn = `<button onclick="switchTab('discarded')" class="text-indigo-400 hover:underline">Revisar/Rescatar &rarr;</button>`;
               }
@@ -818,6 +845,7 @@
                     ${item.email_subject ? `<div class="text-[10px] text-slate-500 truncate">${escapeHtml(item.email_subject)}</div>` : ''}
                   </td>
                   <td class="px-4 py-2.5 font-semibold text-slate-200">${escapeHtml(item.supplier)}</td>
+                  <td class="px-4 py-2.5 text-right font-semibold text-amber-300 whitespace-nowrap">${fmtAmount(item.amount)}</td>
                   <td class="px-4 py-2.5">${destText}</td>
                   <td class="px-4 py-2.5">${statusBadge}</td>
                   <td class="px-4 py-2.5 text-right font-medium">${actionBtn}</td>
@@ -1216,7 +1244,7 @@
       tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-slate-400 text-center">Cargando historial de facturas...</td></tr>';
 
       try {
-        const res = await fetch('/api/history');
+        const res = await fetch('/api/history?limit=5000');
         historyRawItems = await res.json();
 
         // Actualizar opciones del selector de proveedores
@@ -1297,6 +1325,11 @@
           const tA = new Date(a.created_at || 0).getTime();
           const tB = new Date(b.created_at || 0).getTime();
           return historySortAsc ? tA - tB : tB - tA;
+        } else if (historySortCol === 'amount') {
+          const nA = parseFloat(a.amount); const nB = parseFloat(b.amount);
+          const kA = isNaN(nA) ? -Infinity : nA;
+          const kB = isNaN(nB) ? -Infinity : nB;
+          return historySortAsc ? kA - kB : kB - kA;
         } else {
           const vA = (a[historySortCol] || '').toLowerCase();
           const vB = (b[historySortCol] || '').toLowerCase();
@@ -1317,7 +1350,7 @@
       }
 
       // 4. Actualizar iconos de cabeceras
-      ['date_str', 'supplier', 'filename', 'drive_folder_path', 'created_at'].forEach(col => {
+      ['date_str', 'supplier', 'amount', 'filename', 'drive_folder_path', 'created_at'].forEach(col => {
         const iconEl = document.getElementById(`sortIcon_history_${col}`);
         if (!iconEl) return;
         if (historySortCol === col) {
@@ -1335,7 +1368,7 @@
       if (filtered.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="5" class="px-4 py-8 text-center text-slate-400 space-y-2">
+            <td colspan="6" class="px-4 py-8 text-center text-slate-400 space-y-2">
               <i class="fa-solid fa-filter-circle-xmark text-2xl text-slate-500"></i>
               <div class="text-sm font-medium text-slate-300">No se encontraron facturas que coincidan con la búsqueda.</div>
               <div class="text-xs text-slate-500">Prueba a seleccionar otro mes, proveedor o pulsa 'Limpiar filtros'.</div>
@@ -1352,6 +1385,9 @@
           </td>
           <td class="px-4 py-3 font-bold text-white">
             ${escapeHtml(item.supplier)}
+          </td>
+          <td class="px-4 py-3 text-sm font-semibold text-amber-300 whitespace-nowrap text-right">
+            ${fmtAmount(item.amount)}
           </td>
           <td class="px-4 py-3 text-xs text-slate-300 font-mono max-w-xs truncate" title="${escapeHtml(item.filename)}">
             ${escapeHtml(item.filename)}
