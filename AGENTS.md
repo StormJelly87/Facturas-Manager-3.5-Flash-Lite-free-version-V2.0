@@ -51,3 +51,16 @@ Antes de escribir un script, revisa `execution/` según tu directiva. Solo crea 
 4. **Mapeo exhaustivo y diagnósticos encadenados:**
    - Si una sola prueba no basta, **encadena tantas fases de diagnóstico guiado consecutivas como necesites** a través del usuario. No propongas una solución definitiva hasta tener claro todo el mapa de lo que está sucediendo a partir de los datos recolectados.
 5. **Verificación continua:** Antes de dar por resuelta una tarea, solicita una confirmación visual o funcional clara que el usuario pueda comprobar fácilmente.
+
+---
+
+## Memoria persistente (Memanto)
+
+Este proyecto usa el agente de memoria Memanto `facturas-manager`.
+
+Reglas para el agente de IA:
+
+1. Al comenzar a trabajar en este repositorio, activa el agente ejecutando en la terminal: `memanto agent activate facturas-manager`
+2. Si el comando responde que el agente no existe, créalo con: `memanto agent create facturas-manager` — detectará automáticamente el espacio ya existente en la nube y se conectará a él sin perder memorias.
+3. Realiza siempre las operaciones de memoria (guardar, buscar) con este agente activo. No mezcles memorias de otros proyectos.
+4. Para sintaxis y buenas prácticas (tipos de memoria, etiquetas, confianza), consulta la skill `memanto-memory`.
