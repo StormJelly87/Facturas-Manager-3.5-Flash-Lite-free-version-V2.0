@@ -6,6 +6,28 @@ El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/
 
 ---
 
+## [Sin publicar]
+
+- Los correos con factura ya abiertos de los últimos 60 días también se revisan, sin repetir los ya revisados.
+- Un correo con error sigue realmente sin leer: descargarlo ya no lo marca como leído.
+- A un proveedor conocido sin CIF o fecha se le pone en Facturas Dudosas; si dices que no es factura, se aprende ese formato.
+- Las confirmaciones de pedido de Carrefour ya no aparecen en Descartadas.
+- Al archivar desde revisión, el archivo conserva su nombre en Drive. El tope del historial ya no retira lo pendiente de revisar.
+- Los adjuntos con nombres como `PRN.pdf` ya no bloquean el correo.
+- La fecha ya no se pregunta si el mes va con letras, ni si el emisor es español y el texto confirma día/mes.
+- Descartar una factura con fecha dudosa envía su copia provisional a la papelera de Drive.
+- La fecha de la factura ya no se sustituye a ciegas por la primera que aparece en el PDF. Si es un vencimiento, es posterior al correo o hay varias posibles, se pregunta.
+- Una palabra suelta como "may" o "mar" ya no cambia el mes. Se reconocen meses en francés, italiano, portugués y alemán.
+
+### 🐛 Correcciones
+- **PDF marcados como `inline` (Carrefour desde el 25-09-2026):** se procesan todos los PDF, sea cual sea su etiqueta interna. Antes se ignoraban y el correo se marcaba como leído sin dejar rastro.
+- **Ningún correo se pierde en silencio:** los correos sin documento útil quedan en el historial como **"Sin documento 📭"** y en el resumen de fin de ciclo.
+- **Errores:** si un documento falla (Gemini, Drive o historial), el correo sigue sin leer para reintentarlo y el resumen lo indica.
+- **Registro de actividad en vivo:** ahora muestra el detalle de cada correo.
+- **Nombres de adjunto:** se eliminan rutas y caracteres no válidos, y se recortan los demasiado largos.
+
+---
+
 ## [2.2.0] - 2026-09-06
 
 ### 🚀 Novedades Principales

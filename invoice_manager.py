@@ -19,7 +19,8 @@ import unicodedata
 import hashlib
 from email.header import decode_header
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
 from dateutil import parser as dateutil_parser
 import pdfplumber
 
@@ -75,6 +76,16 @@ ENVIO_LOOKBACK_DAYS = int(os.getenv("ENVIO_LOOKBACK_DAYS", "45"))
 # Extensiones que consideramos «factura adjunta»
 INVOICE_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".webp"}
 
+# Por debajo de este tamaño, una imagen integrada en el correo se considera logo o firma
+INLINE_IMAGE_MIN_BYTES = 50 * 1024
+MAX_ATTACHMENT_NAME = 120
+WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL",
+                          *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+# Días hacia atrás en los que se revisan también los correos ya abiertos
+READ_EMAIL_LOOKBACK_DAYS = int(os.getenv("READ_EMAIL_LOOKBACK_DAYS", "60"))
+HEADER_FETCH_BATCH = 200
+
 # Rate limiting: segundos de espera entre llamadas a Gemini
 RATE_LIMIT_DELAY  = 4
 MAX_RETRIES       = 3
@@ -109,6 +120,188 @@ def _load_supplier_mappings() -> tuple[dict, dict]:
 
 SUPPLIER_ALIASES, TAX_ID_SUPPLIER_MAP = _load_supplier_mappings()
 
+
+def _normalize_tax_id(tax_id: str | None) -> str:
+    """Quita separadores y el prefijo de país español: 'ES-A28425270' -> 'A28425270'."""
+    cleaned = re.sub(r"[\s.\-]", "", tax_id or "").upper()
+    return cleaned[2:] if cleaned.startswith("ES") else cleaned
+
+
+def _load_own_tax_ids() -> set[str]:
+    """CIF de la propia empresa (local, en supplier_aliases.json): aparece como cliente
+    en las facturas y la IA puede confundirlo con el del emisor."""
+    if os.path.exists(ALIASES_FILE):
+        try:
+            with open(ALIASES_FILE, "r", encoding="utf-8") as f:
+                return {_normalize_tax_id(t) for t in json.load(f).get("own_tax_ids", [])}
+        except Exception as e:
+            log(f"Aviso al leer {ALIASES_FILE}: {e}", "WARN")
+    return set()
+
+
+OWN_TAX_IDS = _load_own_tax_ids()
+
+# CIF de sociedades, DNI y NIE. Quedan fuera N y W, que son entidades extranjeras.
+_SPANISH_TAX_ID = re.compile(r"^(?:[ABCDEFGHJPQRSUV]\d{7}[0-9A-J]|\d{8}[A-Z]|[XYZ]\d{7}[A-Z])$")
+_NUMERIC_DATE = re.compile(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4}|\d{2})\b")
+
+
+def _spanish_control_is_valid(tax_id: str) -> bool:
+    """Comprueba el dígito o letra de control: distingue un identificador español de
+    otro extranjero con la misma forma, como un RUT chileno 12345678K."""
+    if tax_id[0] in "XYZ" or tax_id[0].isdigit():
+        number = "XYZ".find(tax_id[0]) if tax_id[0] in "XYZ" else ""
+        return "TRWAGMYFPDXBNJZSQVHLCKE"[int(f"{number}{tax_id[1 if number != '' else 0:8]}") % 23] == tax_id[8]
+    digits = [int(c) for c in tax_id[1:8]]
+    total = sum(digits[1::2]) + sum(sum(divmod(d * 2, 10)) for d in digits[0::2])
+    control = (10 - total % 10) % 10
+    return tax_id[8] in (str(control), "JABCDEFGHI"[control])
+
+
+def _is_spanish_tax_id(tax_id: str | None) -> bool:
+    """¿Es el identificador de un emisor español, y no el de la propia empresa?"""
+    cleaned = _normalize_tax_id(tax_id)
+    return (
+        bool(_SPANISH_TAX_ID.match(cleaned))
+        and _spanish_control_is_valid(cleaned)
+        and cleaned not in {_normalize_tax_id(t) for t in OWN_TAX_IDS}
+    )
+
+
+_MONTH_NAMES = {
+    # Español completo
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+    "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+    "septiembre": 9, "setiembre": 9, "octubre": 10,
+    "noviembre": 11, "diciembre": 12,
+    # Español abreviado
+    "ene": 1, "feb": 2, "mar": 3, "abr": 4,
+    "jun": 6, "jul": 7, "ago": 8,
+    "sep": 9, "oct": 10, "nov": 11, "dic": 12,
+    # Inglés completo
+    "january": 1, "february": 2, "march": 3, "april": 4,
+    "may": 5, "june": 6, "july": 7, "august": 8,
+    "september": 9, "october": 10, "november": 11, "december": 12,
+    # Inglés abreviado
+    "jan": 1, "apr": 4, "aug": 8, "dec": 12,
+    # Francés
+    "janvier": 1, "février": 2, "fevrier": 2, "mars": 3, "avril": 4, "mai": 5, "juin": 6,
+    "juillet": 7, "août": 8, "aout": 8, "septembre": 9, "octobre": 10, "novembre": 11,
+    "décembre": 12, "decembre": 12,
+    # Italiano
+    "gennaio": 1, "febbraio": 2, "aprile": 4, "maggio": 5, "giugno": 6, "luglio": 7,
+    "settembre": 9, "ottobre": 10, "dicembre": 12,
+    # Portugués
+    "janeiro": 1, "fevereiro": 2, "março": 3, "marco": 3, "maio": 5, "junho": 6, "julho": 7,
+    "setembro": 9, "outubro": 10, "dezembro": 12,
+    # Alemán
+    "januar": 1, "februar": 2, "märz": 3, "maerz": 3, "juni": 6, "juli": 7, "oktober": 10, "dezember": 12,
+}
+_MONTH_PATTERN = "|".join(sorted(_MONTH_NAMES, key=len, reverse=True))
+_WRITTEN_DATE = re.compile(
+    rf"\b(\d{{1,2}})\.?[\s\-/]+(?:de\s+)?({_MONTH_PATTERN})\b(?:[\s\-/]+(?:de\s+)?(\d{{4}})\b)?"
+)
+
+
+_AMERICAN_WRITTEN_DATE = re.compile(
+    rf"\b({_MONTH_PATTERN})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+(\d{{4}})\b"
+)
+_MONTH_AND_YEAR = re.compile(rf"\b({_MONTH_PATTERN})\.?\s+(?:de\s+)?(\d{{4}})\b")
+
+_DATE_TOKEN = (
+    r"\d{1,2}[/.\-]\d{1,2}[/.\-](?:\d{4}|\d{2})"
+    rf"|\d{{1,2}}\.?[\s\-/]+(?:de\s+)?(?:{_MONTH_PATTERN})\b(?:[\s\-/]+(?:de\s+)?\d{{4}})?"
+    rf"|(?:{_MONTH_PATTERN})\.?\s+\d{{1,2}}(?:st|nd|rd|th)?,?\s+\d{{4}}"
+)
+
+
+def _label_regex(labels: str) -> re.Pattern:
+    """Etiqueta seguida de una fecha en la misma línea, sin otras palabras por medio.
+    En una tabla la fecha de la línea siguiente puede ser de otra columna: esas no cuentan."""
+    return re.compile(rf"\b(?:{labels})\b[ \t:.\-]*(?:de[ \t]+)?({_DATE_TOKEN})")
+
+
+_INVOICE_DATE_LABELS = _label_regex(
+    r"fecha\s+(?:de\s+)?(?:la\s+)?(?:factura|emisi[oó]n|expedici[oó]n)"
+    r"|invoice\s+date|issue\s+date|date\s+of\s+issue|date\s+(?:de\s+(?:la\s+)?)?facture|date\s+d.[eé]mission"
+    r"|rechnungsdatum|data\s+(?:d[ea]\s+)?(?:fattura|factura|fatura|emiss[aã]o|emissione)"
+)
+_BARE_DATE_LABELS = _label_regex(r"fecha|date|data|datum")
+_OTHER_DATE_LABELS = _label_regex(
+    r"vencimiento|fecha\s+de\s+pago|due\s+date|payment\s+due|due|f[aä]llig(?:keit)?"
+    r"|lieferdatum|delivery\s+date|entrega|pedido|order\s+date|albar[aá]n"
+    r"|per[ií]odo(?:\s+de\s+\w+)?|fecha\s+de\s+(?:cobro|servicio)|[eé]ch[eé]ance|scadenza|vencimento"
+)
+_WORD_BEFORE_OTHER_DATE = re.compile(
+    r"(?:due|delivery|order|payment|shipping|expiry|vencimiento|pago|entrega|pedido|albar[aá]n)[\s:]*$"
+)
+
+
+def _labelled_dates(text: str, labels: re.Pattern) -> list[dict]:
+    """Fechas válidas que siguen a una etiqueta, en el orden del documento."""
+    found = []
+    for match in labels.finditer(text or ""):
+        if _WORD_BEFORE_OTHER_DATE.search(text[max(0, match.start() - 20):match.start()]):
+            continue  # "due date: ..." no es una fecha de factura
+        for candidate in _find_text_dates(match.group(1))[:1]:
+            try:
+                datetime(candidate["year"] or 2001, candidate["month"], candidate["day"])
+                found.append(candidate)
+            except ValueError:
+                pass
+    return found
+
+
+def _email_datetime(raw_date: str | None) -> datetime | None:
+    """Fecha de la cabecera del correo, o None si falta o no se entiende."""
+    try:
+        return parsedate_to_datetime(raw_date).replace(tzinfo=None)
+    except (TypeError, ValueError, IndexError, AttributeError):
+        return None
+
+
+def _find_text_dates(text: str) -> list[dict]:
+    """Todas las fechas del documento leídas como día/mes, numéricas y con el mes en letras."""
+    dates = []
+    for match in _NUMERIC_DATE.finditer(text or ""):
+        day, month, year = match.groups()
+        dates.append({
+            "day": int(day), "month": int(month),
+            "year": int(year) if len(year) == 4 else 2000 + int(year),
+            "written": False,
+            "strict": "." not in match.group(0) and len(year) == 4,
+        })
+    for match in _WRITTEN_DATE.finditer(text or ""):
+        day, month, year = match.groups()
+        dates.append({
+            "day": int(day), "month": _MONTH_NAMES[month],
+            "year": int(year) if year else None,
+            "written": True, "strict": False,
+        })
+    for match in _AMERICAN_WRITTEN_DATE.finditer(text or ""):
+        month, day, year = match.groups()
+        dates.append({
+            "day": int(day), "month": _MONTH_NAMES[month],
+            "year": int(year), "written": True, "strict": False,
+        })
+    return dates
+
+
+def _same_date(found: dict, dt: datetime) -> bool:
+    return found["day"] == dt.day and found["month"] == dt.month and found["year"] in (None, dt.year)
+
+
+def _text_confirms_day_first(text: str, dt: datetime) -> bool:
+    """¿El texto del documento dice esa fecha como día/mes, sin señales de mes/día?"""
+    dates = _NUMERIC_DATE.findall(text or "")
+    # Una fecha como 10/30/2026 delata un documento que escribe primero el mes
+    if any(int(first) <= 12 < int(second) for first, second, _ in dates):
+        return False
+    return any(
+        int(first) == dt.day and int(second) == dt.month and str(dt.year).endswith(year)
+        for first, second, year in dates
+    )
+
 # ── Utilidades ───────────────────────────────────────────────────────────────
 
 LOG_CALLBACK = None
@@ -128,6 +321,14 @@ def log(msg: str, level: str = "INFO") -> None:
     except UnicodeEncodeError:
         # Fallback: eliminar caracteres no soportados por la consola
         print(line.encode("ascii", errors="replace").decode("ascii"))
+
+    # Reenviar al panel en vivo (salvo lineas separadoras). Un fallo del panel
+    # nunca debe interrumpir el procesamiento de facturas.
+    if LOG_CALLBACK and msg.strip().strip("="):
+        try:
+            LOG_CALLBACK(msg.strip(), level)
+        except Exception:
+            pass
 
 
 def decode_mime_header(raw: str | None) -> str:
@@ -165,10 +366,72 @@ def connect_gmail() -> imaplib.IMAP4_SSL:
     return mail
 
 
+def email_key(message_id: str | None, uid) -> str:
+    """Identificador estable de un correo: su Message-ID sin corchetes, o 'uid:<n>'."""
+    cleaned = (message_id or "").strip().strip("<>").strip()
+    return cleaned or f"uid:{uid}"
+
+
+def _fetch_email_keys(mail: imaplib.IMAP4_SSL, uids: list[str]) -> dict[str, str]:
+    """Devuelve {uid: clave} pidiendo solo la cabecera Message-ID, sin marcar nada como leído."""
+    keys = {}
+    for start in range(0, len(uids), HEADER_FETCH_BATCH):
+        chunk = uids[start:start + HEADER_FETCH_BATCH]
+        status, data = mail.uid("FETCH", ",".join(chunk), "(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+        if status != "OK":
+            raise RuntimeError("No se pudieron leer las cabeceras de los correos abiertos")
+        for item in data or []:
+            if not isinstance(item, tuple):
+                continue
+            match = re.search(rb"\bUID (\d+)", item[0])
+            if match:
+                uid = match.group(1).decode()
+                keys[uid] = email_key(email.message_from_bytes(item[1]).get("Message-ID"), uid)
+    # Un correo sin cabecera en la respuesta sigue teniendo clave propia
+    for uid in uids:
+        keys.setdefault(uid, email_key(None, uid))
+    return keys
+
+
+def _find_opened_emails(mail: imaplib.IMAP4_SSL, unread_uids: list[str]) -> list[str]:
+    """
+    Correos recientes con factura que están abiertos y que el programa no ha revisado.
+
+    La primera vez no devuelve ninguno: todo lo ya abierto se da por revisado, para
+    no volver a analizar el buzón entero. Si algo falla devuelve lista vacía y los
+    no leídos se procesan igualmente.
+    """
+    import data_manager
+
+    query = (
+        f'X-GM-RAW "is:read newer_than:{READ_EMAIL_LOOKBACK_DAYS}d has:attachment '
+        '(factura OR facturas OR invoice)"'
+    )
+    try:
+        status, data = mail.uid("SEARCH", None, query)
+        if status != "OK":
+            raise RuntimeError("Gmail no aceptó la búsqueda de correos abiertos")
+        unread = set(unread_uids)
+        uids = [u.decode() for u in data[0].split() if u.decode() not in unread]
+        keys = _fetch_email_keys(mail, uids)
+        processed = data_manager.load_processed_email_ids()
+        if processed is None:
+            data_manager.save_processed_email_ids(set(keys.values()))
+            log(f"Primera revisión de correos abiertos: {len(keys)} correo(s) de los últimos {READ_EMAIL_LOOKBACK_DAYS} días se dan por revisados.")
+            return []
+        pending = [uid for uid in uids if keys[uid] not in processed]
+        if pending:
+            log(f"{len(pending)} correo(s) abierto(s) sin revisar de los últimos {READ_EMAIL_LOOKBACK_DAYS} días.")
+        return pending
+    except Exception as e:
+        log(f"No se pudieron revisar los correos ya abiertos: {e}. Se procesan solo los no leídos.", "WARN")
+        return []
+
+
 def search_invoice_emails(mail: imaplib.IMAP4_SSL) -> list[str]:
     """
-    Busca correos no leídos que contengan 'factura', 'facturas' o 'invoice'.
-    Devuelve una lista de UIDs.
+    Busca correos con 'factura', 'facturas' o 'invoice': los no leídos y los
+    abiertos recientes que el programa aún no ha revisado. Devuelve una lista de UIDs.
     """
     mail.select("INBOX")
 
@@ -184,38 +447,71 @@ def search_invoice_emails(mail: imaplib.IMAP4_SSL) -> list[str]:
         log("No se pudo realizar la busqueda.", "ERROR")
         return []
 
-    uids = data[0].split()
+    uids = [uid.decode() for uid in data[0].split()]
     log(f"{len(uids)} correo(s) encontrado(s).")
-    return [uid.decode() for uid in uids]
+    return uids + _find_opened_emails(mail, uids)
 
 
 def fetch_email(mail: imaplib.IMAP4_SSL, uid: str) -> email.message.Message:
-    """Descarga un mensaje completo por UID."""
-    status, data = mail.uid("FETCH", uid, "(RFC822)")
+    """Descarga un mensaje completo por UID, sin marcarlo como leído."""
+    status, data = mail.uid("FETCH", uid, "(BODY.PEEK[])")
     if status != "OK":
         raise RuntimeError(f"No se pudo descargar el correo UID {uid}")
     raw = data[0][1]
     return email.message_from_bytes(raw)
 
 
+def _safe_attachment_name(filename: str) -> str:
+    """Deja solo el nombre del archivo: sin rutas ni caracteres no validos en Windows."""
+    name = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    name = re.sub(r'[<>:"|?*\x00-\x1f]', "_", name).strip(" .")
+    # Windows no permite crear archivos con nombres de dispositivo como PRN.pdf
+    if name.split(".", 1)[0].upper() in WINDOWS_RESERVED_NAMES:
+        name = f"_{name}"
+    # Windows limita la longitud de las rutas: recortar conservando la extension
+    if len(name) > MAX_ATTACHMENT_NAME:
+        suffix = Path(name).suffix[:10]
+        name = name[:MAX_ATTACHMENT_NAME - len(suffix)] + suffix
+    return name
+
+
 def extract_attachments(msg: email.message.Message, tmp_dir: str) -> list[str]:
     """
-    Extrae los adjuntos válidos (PDF, imágenes) del mensaje.
+    Extrae los documentos válidos (PDF, imágenes) del mensaje.
     Devuelve una lista de rutas a los archivos extraídos.
+
+    Un PDF se acepta siempre, sea cual sea su Content-Disposition: Carrefour los
+    envía como 'inline' y Gmail los muestra igualmente como adjuntos.
+    Una imagen 'inline' pequeña se ignora porque suele ser un logo o una firma.
     """
     saved = []
     for part in msg.walk():
-        content_disposition = str(part.get("Content-Disposition", ""))
-        if "attachment" not in content_disposition:
+        if part.is_multipart():
             continue
 
-        filename = decode_mime_header(part.get_filename())
+        disposition = part.get_content_disposition()
+        is_pdf_type = part.get_content_type() == "application/pdf"
+
+        filename = _safe_attachment_name(decode_mime_header(part.get_filename()))
         if not filename:
-            continue
+            if not is_pdf_type:
+                continue
+            filename = "documento_sin_nombre.pdf"
+        elif is_pdf_type and Path(filename).suffix.lower() != ".pdf":
+            filename += ".pdf"
 
         ext = Path(filename).suffix.lower()
         if ext not in INVOICE_EXTENSIONS:
             log(f"  Adjunto ignorado (extension {ext}): {filename}")
+            continue
+
+        payload = part.get_payload(decode=True)
+        if not payload:
+            log(f"  Adjunto ignorado (vacio): {filename}", "WARN")
+            continue
+
+        if ext != ".pdf" and disposition != "attachment" and len(payload) < INLINE_IMAGE_MIN_BYTES:
+            log(f"  Imagen integrada ignorada (probable logo, {len(payload)} bytes): {filename}")
             continue
 
         filepath = os.path.join(tmp_dir, filename)
@@ -227,7 +523,7 @@ def extract_attachments(msg: email.message.Message, tmp_dir: str) -> list[str]:
             counter += 1
 
         with open(filepath, "wb") as f:
-            f.write(part.get_payload(decode=True))
+            f.write(payload)
 
         log(f"  Adjunto guardado: {filename}")
         saved.append(filepath)
@@ -504,12 +800,13 @@ def _matches_reference_invoice(filepath: str, reference_fps: list[dict], thresho
     return False
 
 
-def validate_is_invoice(model: genai.GenerativeModel, filepath: str, sender_email: str = "", reference_fps: list | None = None) -> dict | None:
+def validate_is_invoice(model: genai.GenerativeModel, filepath: str, sender_email: str = "", reference_fps: list | None = None, rejection: dict | None = None, email_date: datetime | None = None) -> dict | None:
     """
     Validación con jerarquía: Origen Email > Validación Fiscal > Contenido PDF.
 
     Envía el adjunto a Gemini para confirmar si es una factura real.
-    - Si NO es factura -> devuelve None (el archivo se ignora).
+    - Si NO es factura -> devuelve None y, si se pasa `rejection`, anota en él el motivo
+      ("kind": AI_NO, NO_TAX_ID, NO_DATE o AI_ERROR) y lo que dio la IA ("supplier", "date").
     - Si SÍ es factura -> devuelve {"supplier": "...", "date": "MM-YY"}.
     - Si hay error de API -> lanza GeminiAPIError.
 
@@ -532,6 +829,7 @@ def validate_is_invoice(model: genai.GenerativeModel, filepath: str, sender_emai
     forced_date = None
     forced_month_num = None
     forced_day_num = None
+    month_written_with_day = False  # Fecha como "6 de marzo" o "27-Jun-2026": no admite dos lecturas
     pdf_text_extracted = False
     pdf_text_lower = ""
     
@@ -543,35 +841,16 @@ def validate_is_invoice(model: genai.GenerativeModel, filepath: str, sender_emai
             pdf_text_extracted = bool(pdf_text_lower.strip())
 
             # 1. Regex Estricto (ej. 06/03/2026, 6-3-2026)
-            match = re.search(r'\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b', pdf_text_lower)
-            if match:
-                d = int(match.group(1))
-                m = int(match.group(2))
-                y = int(match.group(3))
-                if 1 <= d <= 31 and 1 <= m <= 12:
-                    forced_date = datetime(y, m, d)
-            
+            for match in re.finditer(r'\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b', pdf_text_lower):
+                try:
+                    forced_date = datetime(int(match.group(3)), int(match.group(2)), int(match.group(1)))
+                    break
+                except ValueError:
+                    continue  # Una fecha imposible no anula las siguientes
+
             # 2. Mapeo Matemático de Meses (completos + abreviados, ES + EN)
             if not forced_date:
-                all_month_names = {
-                    # Español completo
-                    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
-                    "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
-                    "septiembre": 9, "setiembre": 9, "octubre": 10,
-                    "noviembre": 11, "diciembre": 12,
-                    # Español abreviado
-                    "ene": 1, "feb": 2, "mar": 3, "abr": 4,
-                    "jun": 6, "jul": 7, "ago": 8,
-                    "sep": 9, "oct": 10, "nov": 11, "dic": 12,
-                    # Inglés completo
-                    "january": 1, "february": 2, "march": 3, "april": 4,
-                    "may": 5, "june": 6, "july": 7, "august": 8,
-                    "september": 9, "october": 10, "november": 11, "december": 12,
-                    # Inglés abreviado
-                    "jan": 1, "feb": 2, "mar": 3, "apr": 4,
-                    "jun": 6, "jul": 7, "aug": 8,
-                    "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-                }
+                all_month_names = _MONTH_NAMES
 
                 # 2a. Formato dd-Mon-yyyy / dd Mon yyyy (ej: 27-Jun-2026, 27 Jun 2026)
                 abbrev_month_pattern = '|'.join(sorted(all_month_names.keys(), key=len, reverse=True))
@@ -585,22 +864,30 @@ def validate_is_invoice(model: genai.GenerativeModel, filepath: str, sender_emai
                     y = int(abbrev_match.group(3))
                     if 1 <= forced_day_num <= 31 and 1 <= forced_month_num <= 12:
                         forced_date = datetime(y, forced_month_num, forced_day_num)
+                        month_written_with_day = True
                         log(f"  [FECHA] Formato dd-Mon-yyyy detectado: {forced_day_num:02d}-{forced_month_num:02d}-{y}")
 
                 # 2b. Formato "6 de marzo" (español con preposición)
                 if not forced_date and forced_month_num is None:
                     month_match = re.search(
-                        r'\b(\d{1,2})\s+(?:de\s+)?(' + abbrev_month_pattern + r')\b',
+                        r'\b(\d{1,2})\.?\s+(?:de\s+)?(' + abbrev_month_pattern + r')\b',
                         pdf_text_lower
                     )
                     if month_match:
                         forced_day_num = int(month_match.group(1))
                         forced_month_num = all_month_names[month_match.group(2)]
+                        month_written_with_day = True
                     else:
-                        for m_name, m_num in all_month_names.items():
-                            if re.search(rf'\b{m_name}\b', pdf_text_lower):
-                                forced_month_num = m_num
-                                break
+                        # "November 6, 2026" es cierta; "marzo 2026" fija solo el mes.
+                        # Una palabra suelta ("may", "mar") no significa nada.
+                        american = _AMERICAN_WRITTEN_DATE.search(pdf_text_lower)
+                        month_year = _MONTH_AND_YEAR.search(pdf_text_lower)
+                        if american:
+                            forced_month_num = all_month_names[american.group(1)]
+                            forced_day_num = int(american.group(2))
+                            month_written_with_day = True
+                        elif month_year:
+                            forced_month_num = all_month_names[month_year.group(1)]
         except Exception as e:
             log(f"  [WARN] Fallo al extraer texto para validacion numerica: {e}")
 
@@ -619,7 +906,8 @@ Responde UNICAMENTE con un objeto JSON valido, sin markdown ni texto adicional.
   "is_invoice": "SI o NO",
   "supplier": "Nombre del proveedor o empresa que emite la factura",
   "tax_id": "CIF, NIF o VAT ID del emisor de la factura",
-  "date": "Fecha de la factura en formato YYYY-MM-DD (ejemplo: 2026-02-10 para el 10 de febrero de 2026)",
+  "date": "Fecha de EMISION de la factura en formato YYYY-MM-DD (ejemplo: 2026-02-10 para el 10 de febrero de 2026), nunca la de vencimiento, pago, pedido, entrega, servicio o periodo",
+  "date_kind": "Que fecha has puesto en 'date': EMISION si el documento la identifica como fecha de factura o de emision, VENCIMIENTO si es la de vencimiento o pago, OTRA si es de pedido, entrega, servicio o periodo, DESCONOCIDA si no lo sabes",
   "importe_total": "Importe TOTAL del documento, es decir la cantidad final a pagar con todos los impuestos ya sumados. Solo el numero con decimales y punto (ejemplo: 543.13). Toma el TOTAL final de la factura, no la base. Si no lo encuentras, usa null"
 }
 
@@ -683,7 +971,7 @@ Reglas:
         result = json.loads(text)
 
         # -- Filtro: Es factura? --
-        is_invoice_str = result.get("is_invoice", "NO").strip().upper()
+        is_invoice_str = (result.get("is_invoice") or "NO").strip().upper()
         if is_invoice_str not in ("SI", "YES"):
             # Rescate 1: Si es un documento escaneado (sin texto digital extraíble), re-verificar visualmente
             if not pdf_text_extracted and filepath.lower().endswith(tuple(INVOICE_EXTENSIONS)):
@@ -716,12 +1004,14 @@ Responde estrictamente con un objeto JSON:
                 log(f"  [RESCATE] Gemini dijo NO, pero el documento coincide con una factura de referencia. Continuando...")
             else:
                 log(f"  [NO] No es factura -- descartado: {filename}")
+                if rejection is not None:
+                    rejection.update(kind="AI_NO", supplier=result.get("supplier"), date=result.get("date"))
                 return None
 
         # -- Extraer datos crudos de Gemini --
-        supplier = result.get("supplier", "DESCONOCIDO").strip()
-        tax_id   = result.get("tax_id", "DESCONOCIDO").strip()
-        raw_date = result.get("date", "").strip()
+        supplier = (result.get("supplier") or "DESCONOCIDO").strip()
+        tax_id   = (result.get("tax_id") or "DESCONOCIDO").strip()
+        raw_date = (result.get("date") or "").strip()
 
         # Log del valor crudo de CIF/VAT que devuelve la IA
         log(f"  [DEBUG] Valor CIF/VAT devuelto por IA: '{tax_id}'")
@@ -759,6 +1049,8 @@ Responde estrictamente con un objeto JSON:
                     log(f"  [DEBUG] Documento de Amazon descartado: No se detecta CIF/NIF legal.")
                 else:
                     log(f"  [FILTRO-CIF] Sin CIF/NIF/VAT detectado en '{filename}' -> Descartado")
+                if rejection is not None:
+                    rejection.update(kind="NO_TAX_ID", supplier=supplier, date=raw_date)
                 return None
         else:
             log(f"  [CIF] Identificacion fiscal detectada: {tax_id}")
@@ -779,25 +1071,8 @@ Responde estrictamente con un objeto JSON:
 
             # Meses en español e inglés (completos y abreviados)
             if not has_any_date:
-                all_months = [
-                    # Español completo
-                    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-                    "julio", "agosto", "septiembre", "setiembre", "octubre",
-                    "noviembre", "diciembre",
-                    # Español abreviado
-                    "ene", "feb", "mar", "abr", "jun",
-                    "jul", "ago", "sep", "oct", "nov", "dic",
-                    # Inglés completo
-                    "january", "february", "march", "april", "may", "june",
-                    "july", "august", "september", "october", "november", "december",
-                    # Inglés abreviado
-                    "jan", "feb", "mar", "apr", "jun",
-                    "jul", "aug", "sep", "oct", "nov", "dec",
-                ]
-                for month_name in all_months:
-                    if re.search(rf'\b{month_name}\b', pdf_text_lower):
-                        has_any_date = True
-                        break
+                if re.search(rf'\b(?:{_MONTH_PATTERN})\b', pdf_text_lower):
+                    has_any_date = True
 
             if not has_any_date:
                 # Último recurso: comparar con facturas de referencia
@@ -805,6 +1080,8 @@ Responde estrictamente con un objeto JSON:
                     log(f"  [RESCATE] Sin fecha verificable, pero el documento coincide con una factura de referencia. Continuando...")
                 else:
                     log(f"  [FILTRO-FECHA] Sin fecha verificable en '{filename}' -> Descartado (posible ticket/recibo)")
+                    if rejection is not None:
+                        rejection.update(kind="NO_DATE", supplier=supplier, date=raw_date)
                     return None
             else:
                 log(f"  [FECHA-OK] Fecha detectada en el texto del documento.")
@@ -829,18 +1106,81 @@ Responde estrictamente con un objeto JSON:
                     break
 
         # ── PASO C: Parsear fecha (formato primario ISO YYYY-MM-DD, fallback europeo) ──
+        ai_date_read = False
         try:
             if raw_date:
                 # Intentar formato ISO estricto primero (el solicitado a la IA)
                 try:
                     dt = datetime.strptime(raw_date, "%Y-%m-%d")
                 except ValueError:
-                    dt = dateutil_parser.parse(raw_date, dayfirst=True)
+                    dt = dateutil_parser.parse(raw_date, dayfirst=True).replace(tzinfo=None)
+                ai_date_read = True
             else:
                 dt = datetime.now()
         except (ValueError, OverflowError):
             log(f"  Fecha no parseable: '{raw_date}', usando fecha actual.", "WARN")
             dt = datetime.now()
+
+        # La IA elige cuál es la fecha de la factura; el texto la confirma o corrige. Solo se
+        # cambia por otra si hay una razón clara; si hay varias posibles, decide el usuario.
+        date_doubt = False
+        date_from_invoice_label = False
+        text_dates = _find_text_dates(pdf_text_lower)
+        other_dates = _labelled_dates(pdf_text_lower, _OTHER_DATE_LABELS)
+        if ai_date_read:
+            confirmed = next((d for d in text_dates if _same_date(d, dt)), None)
+            swapped = next((d for d in text_dates if d["strict"] and d["day"] == dt.month
+                            and d["month"] == dt.day and d["year"] == dt.year), None)
+            ai_is_other_date = any(_same_date(d, dt) for d in other_dates)
+
+            # Una etiqueta junto a la fecha es lo más fiable: "Fecha de factura: 03/04/2026"
+            invoice_labelled = _labelled_dates(pdf_text_lower, _INVOICE_DATE_LABELS)
+            bare_labelled = _labelled_dates(pdf_text_lower, _BARE_DATE_LABELS)
+            label_choice = None
+            keep_ai_date = False
+            if len({(d["day"], d["month"]) for d in invoice_labelled}) > 1:
+                date_doubt = keep_ai_date = True  # Dos fechas de factura distintas
+            elif invoice_labelled:
+                label_choice = invoice_labelled[0]
+            elif bare_labelled and (not confirmed or ai_is_other_date):
+                label_choice = bare_labelled[0]
+            elif bare_labelled and not any(_same_date(d, dt) for d in bare_labelled):
+                date_doubt = keep_ai_date = True  # La IA y la etiqueta "Fecha:" dicen cosas distintas
+
+            if label_choice:
+                if not _same_date(label_choice, dt):
+                    log(f"  [FECHA-ETIQUETA] La IA leyó {dt.strftime('%d/%m/%Y')}, pero la etiqueta de la factura dice {label_choice['day']:02d}/{label_choice['month']:02d}.")
+                dt = datetime(label_choice["year"] or dt.year, label_choice["month"], label_choice["day"])
+                forced_date, forced_month_num, forced_day_num = None, None, None
+                date_from_invoice_label = True
+            elif keep_ai_date or confirmed:
+                forced_date, forced_month_num, forced_day_num = None, None, None
+                if confirmed:
+                    log(f"  [VERIFICACIÓN-NUMÉRICA] El texto confirma la fecha de la IA: {dt.strftime('%d/%m/%Y')}")
+            elif swapped:
+                forced_date = datetime(swapped["year"], swapped["month"], swapped["day"])
+                forced_month_num, forced_day_num = None, None
+            else:
+                possible = set()
+                for d in text_dates:
+                    try:
+                        datetime(d["year"] or dt.year, d["month"], d["day"])
+                        possible.add((d["day"], d["month"]))
+                    except ValueError:
+                        pass
+                if len(possible) > 1:
+                    # Varias fechas y ninguna es la de la IA: no se sustituye a ciegas
+                    log(f"  [DUDA-FECHA] {dt.strftime('%d/%m/%Y')} no coincide con ninguna de las {len(possible)} fechas del documento.", "WARN")
+                    forced_date, forced_month_num, forced_day_num = None, None, None
+                    date_doubt = keep_ai_date = True
+
+            if label_choice or keep_ai_date or confirmed or swapped:
+                # Es cierta si esa misma fecha aparece con el mes en letras
+                month_written_with_day = any(d["written"] and _same_date(d, dt) for d in text_dates)
+
+            if str(result.get("date_kind") or "").strip().upper() in ("VENCIMIENTO", "OTRA") and not date_from_invoice_label:
+                log(f"  [DUDA-FECHA] La IA indica que {dt.strftime('%d/%m/%Y')} no es la fecha de emisión.", "WARN")
+                date_doubt = True
 
         # Aplicar Reglas de Verificacion y Mapeo:
         if forced_date:
@@ -866,7 +1206,7 @@ Responde estrictamente con un objeto JSON:
         has_learned_date_format = bool(vendor_rule and vendor_rule.get("date_format"))
         if has_learned_date_format:
             fmt = vendor_rule["date_format"].upper()
-            if fmt == "MM/DD/YYYY" and dt.day <= 12 and dt.month <= 12:
+            if fmt == "MM/DD/YYYY" and dt.day <= 12 and dt.month <= 12 and not month_written_with_day:
                 try:
                     dt = dt.replace(month=dt.day, day=dt.month)
                     log(f"  [REGLA-FECHA] Formato MM/DD/YYYY aplicado para '{supplier}': {dt.strftime('%d/%m/%Y')}")
@@ -879,18 +1219,36 @@ Responde estrictamente con un objeto JSON:
         now = datetime.now()
         if dt > now:
             log(f"  [SEGURIDAD] Fecha futura detectada ({dt.strftime('%Y-%m-%d')}). Invirtiendo día y mes automáticamente.")
-            try:
-                dt = dt.replace(month=dt.day, day=dt.month)
-            except ValueError:
-                pass
-            
+            if not month_written_with_day:
+                try:
+                    dt = dt.replace(month=dt.day, day=dt.month)
+                except ValueError:
+                    pass
+
             if dt > now:
                 dt = now
 
-        # Detección de Ambigüedad (ambos <= 12, diferentes y sin regla aprendida)
+        # Detección de Ambigüedad (ambos <= 12, diferentes y sin regla aprendida).
+        # No se pregunta si el mes va con letras, ni si el emisor es español y el
+        # propio texto confirma la fecha como día/mes.
+        date_is_certain = month_written_with_day or (
+            _is_spanish_tax_id(tax_id) and _text_confirms_day_first(pdf_text_lower, dt)
+        )
+
+        # También se pregunta, aunque haya regla aprendida, si la fecha no puede ser la
+        # de la factura: es un vencimiento u otra fecha etiquetada, o es posterior al correo.
+        if not date_from_invoice_label and any(_same_date(d, dt) for d in other_dates) \
+                and any(not _same_date(d, dt) for d in text_dates):
+            log(f"  [DUDA-FECHA] {dt.strftime('%d/%m/%Y')} parece un vencimiento u otra fecha, no la de la factura.", "WARN")
+            date_doubt = True
+        if email_date and dt.date() > email_date.date() + timedelta(days=1):
+            log(f"  [DUDA-FECHA] {dt.strftime('%d/%m/%Y')} es posterior al correo ({email_date.strftime('%d/%m/%Y')}).", "WARN")
+            date_doubt = True
+
+        can_swap = dt.day <= 12 and dt.month <= 12 and dt.day != dt.month
         is_ambiguous = False
         ambiguous_options = []
-        if not has_learned_date_format and dt.day <= 12 and dt.month <= 12 and dt.day != dt.month:
+        if date_doubt or (not has_learned_date_format and not date_is_certain and can_swap):
             is_ambiguous = True
             _MONTH_NAMES_ES = {
                 1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
@@ -915,6 +1273,8 @@ Responde estrictamente con un objeto JSON:
                     "label": f"{dt.month} de {_MONTH_NAMES_ES.get(dt.day, '')} de {dt.year}",
                 }
             ]
+            if not can_swap:
+                ambiguous_options = ambiguous_options[:1]  # La lectura invertida no sería una fecha real
             log(f"  [AMBIGÜEDAD] Fecha ambigua detectada ({dt.day}/{dt.month} vs {dt.month}/{dt.day}) para '{supplier}'")
 
         date_str = dt.strftime("%m-%y")
@@ -942,9 +1302,12 @@ Responde estrictamente con un objeto JSON:
             "ambiguous_options": ambiguous_options,
         }
 
-    except (json.JSONDecodeError, KeyError) as e:
-        log(f"  Error al parsear respuesta de Gemini: {e}", "ERROR")
-        log(f"    Respuesta raw: {response.text[:200] if response else 'N/A'}", "DEBUG")
+    except (ValueError, KeyError, AttributeError, TypeError) as e:
+        # Respuesta bloqueada o con formato inesperado: reintentar daria lo mismo,
+        # asi que el documento va a 'Descartadas', donde el usuario puede rescatarlo.
+        log(f"  Error al interpretar la respuesta de Gemini: {e}", "ERROR")
+        if rejection is not None:
+            rejection["kind"] = "AI_ERROR"
         return None
 
 
@@ -1246,6 +1609,86 @@ def move_drive_file(service, file_id: str, old_parent_id: str, new_parent_id: st
 
 # ── Flujo principal ──────────────────────────────────────────────────────────
 
+def trash_drive_file(service, file_id: str) -> bool:
+    """Envía un archivo a la papelera de Drive, recuperable. Si ya no existe, cuenta como retirado."""
+    try:
+        service.files().update(
+            fileId=file_id,
+            body={"trashed": True},
+            fields="id",
+            supportsAllDrives=True,
+        ).execute()
+        log(f"  [DRIVE] Archivo {file_id} enviado a la papelera")
+        return True
+    except Exception as e:
+        if getattr(getattr(e, "resp", None), "status", None) == 404:
+            log(f"  [DRIVE] El archivo {file_id} ya no estaba en Drive")
+            return True
+        log(f"  [DRIVE-ERROR] Error al enviar a la papelera {file_id}: {e}", "ERROR")
+        return False
+
+
+def _finish_email(mail: imaplib.IMAP4_SSL, uid: str, msg: email.message.Message) -> None:
+    """Marca el correo como leído y lo anota como revisado para no repetirlo."""
+    mark_as_read(mail, uid)
+    try:
+        import data_manager
+        data_manager.remember_processed_email(email_key(msg.get("Message-ID"), uid))
+    except Exception as e:
+        log(f"  [WARN] No se pudo anotar el correo como revisado: {e}", "WARN")
+
+
+def _register_rejected_document(filepath: str, sender: str, subject: str, rejection: dict) -> None:
+    """Decide adónde va un documento rechazado: se ignora, a Dudosas o a Descartadas."""
+    import data_manager
+
+    filename = os.path.basename(filepath)
+    kind = rejection.get("kind")
+    today_folder = datetime.now().strftime("%m-%y")
+
+    if kind != "AI_ERROR" and data_manager.is_rejected_format(sender, filename):
+        log(f"  [IGNORADO] '{filename}' tiene un formato que ya se sabe que no es factura.")
+        data_manager.add_history_entry(
+            status="IGNORED_KNOWN_FORMAT",
+            filename=filename,
+            supplier=sender or "DESCONOCIDO",
+            date_str=today_folder,
+            reason="Formato de documento que no es factura",
+            email_subject=subject,
+            sender=sender,
+        )
+        return
+
+    if kind in ("NO_TAX_ID", "NO_DATE") and data_manager.is_known_supplier(sender, rejection.get("supplier")):
+        missing = "el CIF" if kind == "NO_TAX_ID" else "la fecha"
+        log(f"  [DUDOSA] ⚠️ '{filename}' es de un proveedor conocido pero no se encuentra {missing} -> A revisar en 'Facturas Dudosas'.", "WARN")
+        suggested = rejection.get("date")
+        data_manager.add_history_entry(
+            status="REVIEW_MISSING_DATA",
+            filename=filename,
+            supplier=rejection.get("supplier") or sender or "DESCONOCIDO",
+            date_str=today_folder,
+            reason=f"Proveedor conocido, pero no se encuentra {missing} en el documento.",
+            original_filepath=filepath,
+            email_subject=subject,
+            sender=sender,
+            detected_dates=[{"iso": suggested}] if suggested else [],
+        )
+        return
+
+    log(f"  [DESCARTADA] 🚫 Documento '{filename}' de {sender} no es factura válida o falta CIF -> Disponible en 'Descartadas' para revisar o rescatar.", "INFO")
+    data_manager.add_history_entry(
+        status="DISCARDED",
+        filename=filename,
+        supplier=sender or "DESCONOCIDO",
+        date_str=today_folder,
+        reason="No clasificado como factura válida o sin identificación fiscal (CIF/NIF/VAT)",
+        original_filepath=filepath,
+        email_subject=subject,
+        sender=sender,
+    )
+
+
 def process_invoice(
     mail: imaplib.IMAP4_SSL,
     uid: str,
@@ -1253,8 +1696,13 @@ def process_invoice(
     drive_service,
     tmp_dir: str,
     reference_fps: list | None = None,
-) -> None:
-    """Procesa un unico correo: extraer adjuntos -> validar -> subir -> marcar leido."""
+) -> int:
+    """
+    Procesa un unico correo: extraer adjuntos -> validar -> subir -> marcar leido.
+
+    Devuelve cuantos documentos fallaron y deben reintentarse. Si hay alguno, el
+    correo sigue sin leer. Todo correo procesado deja rastro en el historial.
+    """
 
     msg = fetch_email(mail, uid)
     subject = decode_mime_header(msg.get("Subject"))
@@ -1268,39 +1716,52 @@ def process_invoice(
     ignored_domain = _is_ignored_sender(sender)
     if ignored_domain:
         log(f"  [IGNORADO] Remitente de '{ignored_domain}': sus facturas se descargan del portal B2B, correo omitido.")
-        mark_as_read(mail, uid)
-        return
+        _finish_email(mail, uid, msg)
+        return 0
 
     # 1. Extraer adjuntos
     attachments = extract_attachments(msg, tmp_dir)
     if not attachments:
-        log("  No se encontraron adjuntos validos, marcando como leido igualmente.")
-        mark_as_read(mail, uid)
-        return
+        ignored_names = [
+            decode_mime_header(p.get_filename()) for p in msg.walk() if p.get_filename()
+        ]
+        ignored_text = ", ".join(ignored_names) if ignored_names else "ninguno"
+        log(f"  [SIN DOCUMENTO] El correo '{subject}' no trae ningun PDF ni imagen util. Adjuntos ignorados: {ignored_text}", "WARN")
+        try:
+            import data_manager
+            data_manager.add_history_entry(
+                status="NO_DOCUMENT",
+                filename=ignored_names[0] if ignored_names else "(sin adjuntos)",
+                supplier=sender or "DESCONOCIDO",
+                date_str=datetime.now().strftime("%m-%y"),
+                reason=f"El correo no trae ningun PDF ni imagen util. Adjuntos ignorados: {ignored_text}",
+                email_subject=subject,
+                sender=sender,
+            )
+        except Exception as e_dm:
+            log(f"  [ERROR] No se pudo registrar el correo sin documento: {e_dm}", "ERROR")
+            return 1
+        _finish_email(mail, uid, msg)
+        return 0
 
     # 2. Procesar cada adjunto
     any_invoice_found = False
-    had_api_error = False
+    failed_count = 0
     for filepath in attachments:
         try:
             # 2a. Validar con Gemini (anti-falsos positivos)
-            info = validate_is_invoice(gemini_client, filepath, sender_email=sender, reference_fps=reference_fps)
+            rejection = {}
+            info = validate_is_invoice(
+                gemini_client, filepath, sender_email=sender, reference_fps=reference_fps,
+                rejection=rejection, email_date=_email_datetime(msg.get("Date")),
+            )
             if info is None:
-                log(f"  [DESCARTADA] 🚫 Documento '{os.path.basename(filepath)}' de {sender} no es factura válida o falta CIF -> Disponible en 'Descartadas' para revisar o rescatar.", "INFO")
                 try:
-                    import data_manager
-                    data_manager.add_history_entry(
-                        status="DISCARDED",
-                        filename=os.path.basename(filepath),
-                        supplier=sender or "DESCONOCIDO",
-                        date_str=datetime.now().strftime("%m-%y"),
-                        reason="No clasificado como factura válida o sin identificación fiscal (CIF/NIF/VAT)",
-                        original_filepath=filepath,
-                        email_subject=subject,
-                        sender=sender,
-                    )
+                    _register_rejected_document(filepath, sender, subject, rejection)
                 except Exception as e_dm:
-                    log(f"  [WARN] Fallo al registrar descarte: {e_dm}")
+                    # Sin registro ni cuarentena el documento se perderia: reintentar
+                    log(f"  [ERROR] Fallo al registrar descarte: {e_dm}", "ERROR")
+                    failed_count += 1
                 continue
 
             any_invoice_found = True
@@ -1383,14 +1844,18 @@ def process_invoice(
                         amount=info.get("amount"),
                     )
             except Exception as e_dm:
-                log(f"  [WARN] Fallo al registrar historial: {e_dm}")
+                # Reintentar: el duplicado se detecta en Drive y queda registrado
+                log(f"  [ERROR] Fallo al registrar historial: {e_dm}", "ERROR")
+                failed_count += 1
 
         except GeminiAPIError as e:
             log(f"  Error de API Gemini: {e}", "ERROR")
             log(f"  --> Correo NO se marcara como leido (se reintentara la proxima vez).", "WARN")
-            had_api_error = True
+            failed_count += 1
         except Exception as e:
             log(f"  Error procesando adjunto {os.path.basename(filepath)}: {e}", "ERROR")
+            log(f"  --> Correo NO se marcara como leido (se reintentara la proxima vez).", "WARN")
+            failed_count += 1
         finally:
             # Limpiar archivo temporal
             try:
@@ -1398,13 +1863,14 @@ def process_invoice(
             except OSError:
                 pass
 
-    # 3. Resumen y marcar como leido (solo si no hubo errores de API)
-    if had_api_error:
-        log(f"  Correo UID {uid} NO marcado como leido (hubo errores de API).")
+    # 3. Resumen y marcar como leido (solo si ningun documento fallo)
+    if failed_count:
+        log(f"  Correo UID {uid} NO marcado como leido ({failed_count} documento(s) con error).")
     else:
         if not any_invoice_found:
             log(f"  Ningun adjunto era una factura real en este correo.")
-        mark_as_read(mail, uid)
+        _finish_email(mail, uid, msg)
+    return failed_count
 
 
 # ── Sincronización del portal B2B de EnvíoMédical ────────────────────────────

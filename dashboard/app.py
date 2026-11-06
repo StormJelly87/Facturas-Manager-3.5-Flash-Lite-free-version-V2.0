@@ -3,6 +3,8 @@ dashboard/app.py — Servidor Web FastAPI para la interfaz de control del Gestor
 """
 
 import os
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from datetime import datetime
@@ -91,7 +93,8 @@ def get_discarded_invoices(limit: int = 100):
 
 @app.get("/api/ambiguous")
 def get_ambiguous_invoices(limit: int = 100):
-    return data_manager.get_history(status="AMBIGUOUS_DATE", limit=limit)
+    review_statuses = ("AMBIGUOUS_DATE", "REVIEW_MISSING_DATA")
+    return [e for e in data_manager.get_history(limit=500) if e.get("status") in review_statuses][:limit]
 
 
 @app.get("/api/preview/{item_id}")
@@ -156,7 +159,12 @@ def rescue_invoice(item_id: str, req: RescueRequest):
         year_id = invoice_manager.get_or_create_folder(drive_service, year_folder, invoice_manager.DRIVE_ROOT_ID)
         month_id = invoice_manager.get_or_create_folder(drive_service, month_folder, year_id)
         supplier_id = invoice_manager.get_or_create_supplier_folder(drive_service, supplier_name, month_id)
-        uploaded_id = invoice_manager.upload_to_drive(drive_service, filepath, supplier_id)
+        # La copia interna tiene un nombre técnico: en Drive debe llamarse como el documento
+        with tempfile.TemporaryDirectory(prefix="rescate_") as tmp_dir:
+            original_name = invoice_manager._safe_attachment_name(entry.get("filename") or "") or os.path.basename(filepath)
+            named_copy = os.path.join(tmp_dir, original_name)
+            shutil.copy2(filepath, named_copy)
+            uploaded_id = invoice_manager.upload_to_drive(drive_service, named_copy, supplier_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al subir a Google Drive: {e}")
 
@@ -261,15 +269,31 @@ def resolve_ambiguity(item_id: str, req: AmbiguityResolutionRequest):
 
 @app.post("/api/discard_ambiguous/{item_id}")
 def discard_ambiguous(item_id: str):
-    """Descarta un documento en dudosas sin validarlo como factura."""
+    """Descarta una factura con fecha dudosa y retira de Drive su copia provisional."""
     entry = data_manager.get_history_entry(item_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    
-    success = data_manager.discard_history_entry(
+    if entry.get("status") != "AMBIGUOUS_DATE":
+        raise HTTPException(status_code=400, detail="Este documento no es una factura con fecha dudosa")
+
+    drive_file_id = entry.get("drive_file_id")
+    if drive_file_id:
+        try:
+            removed = invoice_manager.trash_drive_file(invoice_manager.authenticate_drive(), drive_file_id)
+        except Exception:
+            removed = False
+        if not removed:
+            raise HTTPException(status_code=500, detail="No se pudo quitar de Google Drive. El documento sigue en Dudosas.")
+        data_manager.update_history_entry(item_id, {
+            "drive_file_id": None,
+            "drive_folder_id": None,
+            "drive_folder_path": None,
+        })
+
+    data_manager.discard_history_entry(
         item_id, reason="Descartado por el usuario desde Facturas Dudosas (no se considera factura válida)"
     )
-    return {"success": True, "message": "Documento descartado correctamente"}
+    return {"success": True, "message": "Documento descartado y retirado de Drive"}
 
 
 @app.delete("/api/discarded/{item_id}")
@@ -282,6 +306,34 @@ def dismiss_discarded(item_id: str):
     
     data_manager.confirm_discard_and_archive(item_id, delete_file=True)
     return {"success": True, "message": "Documento descartado y retirado de la lista"}
+
+
+@app.post("/api/review/{item_id}/reject")
+def reject_reviewed_document(item_id: str):
+    """El usuario dice que un documento dudoso no es factura: el sistema aprende ese formato."""
+    entry = data_manager.get_history_entry(item_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    if entry.get("status") != "REVIEW_MISSING_DATA":
+        raise HTTPException(status_code=400, detail="Este documento no está pendiente de esta revisión")
+
+    data_manager.learn_rejected_format(
+        entry.get("sender", ""), entry.get("filename", ""), supplier=entry.get("supplier", "")
+    )
+    data_manager.confirm_discard_and_archive(item_id, delete_file=True)
+    return {"success": True, "message": "Documento descartado. Este formato no volverá a aparecer."}
+
+
+@app.get("/api/rejected_formats")
+def get_rejected_formats():
+    return data_manager.list_rejected_formats()
+
+
+@app.delete("/api/rejected_formats/{format_id}")
+def forget_rejected_format(format_id: str):
+    if not data_manager.forget_rejected_format(format_id):
+        raise HTTPException(status_code=404, detail="Formato no encontrado")
+    return {"success": True, "message": "Formato olvidado"}
 
 
 # ── Endpoints de Reglas Memorizadas y Programación ───────────────────────────

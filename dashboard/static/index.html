@@ -211,7 +211,9 @@
                 <option value="SUCCESS">Subidas a Drive ✅</option>
                 <option value="SKIPPED_DUPLICATE">Duplicados omitidos ⏭️</option>
                 <option value="AMBIGUOUS_DATE">Fechas Dudosas ⚠️</option>
+                <option value="REVIEW_MISSING_DATA">Dudosas: falta un dato ⚠️</option>
                 <option value="DISCARDED">Descartadas 🚫</option>
+                <option value="NO_DOCUMENT">Sin documento 📭</option>
               </select>
             </div>
             <button onclick="resetSessionFilters()" class="text-xs text-indigo-400 hover:text-indigo-300 hover:underline">
@@ -832,6 +834,14 @@
                 statusBadge = '<span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold whitespace-nowrap">Fecha Dudosa ⚠️</span>';
                 destText = `<span class="font-mono text-amber-400/90">${escapeHtml(item.drive_folder_path || item.date_str)} (Provisional)</span>`;
                 actionBtn = `<button onclick="switchTab('ambiguous')" class="text-indigo-400 hover:underline">Resolver fecha &rarr;</button>`;
+              } else if (item.status === 'REVIEW_MISSING_DATA') {
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold whitespace-nowrap">Dudosa ⚠️</span>';
+                destText = `<span class="text-amber-400/90 italic">${escapeHtml(item.reason || 'Falta un dato en el documento')}</span>`;
+                actionBtn = `<button onclick="switchTab('ambiguous')" class="text-indigo-400 hover:underline">Revisar &rarr;</button>`;
+              } else if (item.status === 'NO_DOCUMENT') {
+                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-300 border border-slate-500/30 font-semibold whitespace-nowrap">Sin documento 📭</span>';
+                destText = `<span class="text-slate-400 italic">${escapeHtml(item.reason || 'El correo no trae ningún PDF ni imagen útil')}</span>`;
+                actionBtn = '<span class="text-slate-400">Revisar en Gmail</span>';
               } else {
                 statusBadge = '<span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold whitespace-nowrap">Descartada 🚫</span>';
                 destText = `<span class="text-slate-400 italic">${escapeHtml(item.reason || 'No es factura legal con CIF')}</span>`;
@@ -905,6 +915,8 @@
         }
 
         container.innerHTML = items.map(item => {
+          if (item.status === 'REVIEW_MISSING_DATA') return renderMissingDataCard(item);
+
           const opts = item.detected_dates || [];
           const opt1 = opts[0] || null;
           const opt2 = opts[1] || null;
@@ -925,26 +937,26 @@
                 <div class="space-y-3">
                   <div class="flex items-center justify-between">
                     <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <i class="fa-solid fa-triangle-exclamation"></i> Ambigüedad Día/Mes (≤ 12)
+                      <i class="fa-solid fa-triangle-exclamation"></i> Comprueba la fecha
                     </span>
                     <span class="text-xs text-slate-400">${item.created_at ? item.created_at.replace('T', ' ') : ''}</span>
                   </div>
 
                   <h3 class="text-lg font-bold text-white">${escapeHtml(item.supplier)}</h3>
                   <p class="text-xs text-slate-300">
-                    El documento contiene números donde tanto el día como el mes son ≤ 12. ¿Cuál es la fecha de emisión real?
+                    El programa no está seguro de la fecha de este documento. ¿Cuál es la fecha de emisión real?
                   </p>
 
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                     ${opt1 ? `
-                      <button onclick="promptConfirmDate('${item.id}', '${escapeHtml(item.supplier)}', ${opt1.day}, ${opt1.month}, ${opt1.year}, '${opt1.format}', '${opt1.label}')" class="bg-slate-700/80 hover:bg-indigo-600 text-left p-3.5 rounded-xl border border-slate-600 hover:border-indigo-500 transition group shadow-sm">
+                      <button onclick="promptConfirmDate('${item.id}', ${jsArg(item.supplier)}, ${opt1.day}, ${opt1.month}, ${opt1.year}, '${opt1.format}', '${opt1.label}')" class="bg-slate-700/80 hover:bg-indigo-600 text-left p-3.5 rounded-xl border border-slate-600 hover:border-indigo-500 transition group shadow-sm">
                         <div class="text-[11px] text-slate-400 group-hover:text-indigo-200 uppercase font-semibold">Opción A (${opt1.format})</div>
                         <div class="text-sm font-bold text-white mt-1">Es ${opt1.label}</div>
                       </button>
                     ` : ''}
 
                     ${opt2 ? `
-                      <button onclick="promptConfirmDate('${item.id}', '${escapeHtml(item.supplier)}', ${opt2.day}, ${opt2.month}, ${opt2.year}, '${opt2.format}', '${opt2.label}')" class="bg-slate-700/80 hover:bg-indigo-600 text-left p-3.5 rounded-xl border border-slate-600 hover:border-indigo-500 transition group shadow-sm">
+                      <button onclick="promptConfirmDate('${item.id}', ${jsArg(item.supplier)}, ${opt2.day}, ${opt2.month}, ${opt2.year}, '${opt2.format}', '${opt2.label}')" class="bg-slate-700/80 hover:bg-indigo-600 text-left p-3.5 rounded-xl border border-slate-600 hover:border-indigo-500 transition group shadow-sm">
                         <div class="text-[11px] text-slate-400 group-hover:text-indigo-200 uppercase font-semibold">Opción B (${opt2.format})</div>
                         <div class="text-sm font-bold text-white mt-1">Es ${opt2.label}</div>
                       </button>
@@ -956,7 +968,7 @@
                     <label class="block text-xs font-semibold text-slate-400 mb-1.5">Si ninguna es correcta, elige la fecha exacta en el calendario:</label>
                     <div class="flex items-center space-x-2">
                       <input type="date" id="manualDate_${item.id}" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 flex-1">
-                      <button onclick="submitManualDate('${item.id}', '${escapeHtml(item.supplier)}')" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg transition">
+                      <button onclick="submitManualDate('${item.id}', ${jsArg(item.supplier)})" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg transition">
                         Confirmar Manual
                       </button>
                     </div>
@@ -968,7 +980,7 @@
                   <div class="text-[11px] text-slate-400 truncate">
                     Carpeta provisional: <span class="font-mono text-slate-200">${item.drive_folder_path || item.date_str}</span>
                   </div>
-                  <button onclick="promptDiscardAmbiguous('${item.id}', '${escapeHtml(item.supplier)}')" class="bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 py-1.5 px-3 rounded-lg text-xs font-semibold transition shrink-0 flex items-center gap-1.5">
+                  <button onclick="promptDiscardAmbiguous('${item.id}', ${jsArg(item.supplier)})" class="bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 py-1.5 px-3 rounded-lg text-xs font-semibold transition shrink-0 flex items-center gap-1.5">
                     <i class="fa-solid fa-trash-can"></i> Descartar
                   </button>
                 </div>
@@ -982,9 +994,102 @@
       }
     }
 
+    // Proveedor conocido al que le falta el CIF o la fecha: decide el usuario
+    function renderMissingDataCard(item) {
+      const suggested = (item.detected_dates && item.detected_dates[0] && item.detected_dates[0].iso) || '';
+      const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(suggested) ? suggested : '';
+      return `
+        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 shadow-md">
+          <div class="h-96 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 flex flex-col">
+            <div class="bg-slate-800 px-3 py-1.5 border-b border-slate-700 text-xs font-semibold text-slate-300 flex items-center justify-between">
+              <span class="truncate">${escapeHtml(item.filename)}</span>
+              <a href="/api/preview/${item.id}" target="_blank" class="text-indigo-400 hover:underline">Abrir pestaña <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>
+            </div>
+            <iframe src="/api/preview/${item.id}#toolbar=0" class="w-full flex-1 border-0"></iframe>
+          </div>
+          <div class="flex flex-col justify-between space-y-4">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <i class="fa-solid fa-triangle-exclamation"></i> Falta un dato
+                </span>
+                <span class="text-xs text-slate-400">${item.created_at ? item.created_at.replace('T', ' ') : ''}</span>
+              </div>
+              <h3 class="text-lg font-bold text-white">${escapeHtml(item.supplier)}</h3>
+              <p class="text-xs text-slate-300">${escapeHtml(item.reason)} Todavía no está en Drive.</p>
+              <div class="text-xs text-slate-400 space-y-1">
+                <div><strong>Remitente:</strong> ${escapeHtml(item.sender || 'Desconocido')}</div>
+                <div><strong>Asunto:</strong> ${escapeHtml(item.email_subject || 'Sin asunto')}</div>
+              </div>
+              <div class="pt-3 border-t border-slate-700/60 space-y-2.5">
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1">Proveedor:</label>
+                  <input type="text" id="reviewSupplier_${item.id}" value="${escapeHtml(item.supplier)}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1">Fecha de la factura:</label>
+                  <input type="date" id="reviewDate_${item.id}" value="${safeDate}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                </div>
+              </div>
+            </div>
+            <div class="pt-2 flex items-center space-x-3">
+              <button onclick="rejectReviewed('${item.id}')" class="flex-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-medium py-2.5 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5" title="No volverá a aparecer este formato de documento de este remitente">
+                <i class="fa-solid fa-trash-can"></i>
+                <span>No es factura</span>
+              </button>
+              <button onclick="acceptReviewed('${item.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-3 rounded-xl text-xs shadow-md shadow-emerald-600/30 transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-box-archive"></i>
+                <span>Sí es factura: archivar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function acceptReviewed(itemId) {
+      const supplier = document.getElementById(`reviewSupplier_${itemId}`).value.trim();
+      const date = document.getElementById(`reviewDate_${itemId}`).value;
+      if (!supplier || !date) {
+        alert('Indica el proveedor y la fecha de la factura.');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/rescue/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ supplier, date, always_accept: false, reason_notes: '' }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.detail || 'Error al archivar la factura.');
+          return;
+        }
+        loadAmbiguous();
+        pollStatus();
+      } catch (e) {
+        alert('Fallo de conexión al archivar.');
+      }
+    }
+
+    async function rejectReviewed(itemId) {
+      if (!confirm('¿Confirmas que no es una factura? Este formato de documento de este remitente no volverá a aparecerte si le vuelve a faltar el dato.')) return;
+      try {
+        const res = await fetch(`/api/review/${itemId}/reject`, { method: 'POST' });
+        if (!res.ok) {
+          alert('Error al descartar el documento.');
+          return;
+        }
+        loadAmbiguous();
+        pollStatus();
+      } catch (e) {
+        alert('Fallo de conexión al descartar.');
+      }
+    }
+
     // Modal Anti-Misclick de Fecha
     function promptConfirmDate(itemId, supplier, day, month, year, format, label) {
-      const text = `¿Estás seguro de que la fecha correcta es <strong>${label}</strong> para el proveedor <strong>${supplier}</strong>?`;
+      const text = `¿Estás seguro de que la fecha correcta es <strong>${label}</strong> para el proveedor <strong>${escapeHtml(supplier)}</strong>?`;
       document.getElementById('modalConfirmationText').innerHTML = text;
 
       const btnConfirm = document.getElementById('btnModalConfirm');
@@ -1019,7 +1124,7 @@
 
     // Modal de Descarte para Facturas Dudosas
     function promptDiscardAmbiguous(itemId, supplier) {
-      document.getElementById('modalDiscardText').innerHTML = `¿Estás seguro de que deseas descartar el documento de <strong>${supplier}</strong>? No se archivará como factura válida.`;
+      document.getElementById('modalDiscardText').innerHTML = `¿Estás seguro de que deseas descartar el documento de <strong>${escapeHtml(supplier)}</strong>? Su copia provisional irá a la papelera de Drive y el documento pasará a Descartadas.`;
 
       const btnConfirm = document.getElementById('btnModalConfirmDiscard');
       btnConfirm.onclick = async () => {
@@ -1028,6 +1133,10 @@
 
         try {
           const res = await fetch(`/api/discard_ambiguous/${itemId}`, { method: 'POST' });
+          if (!res.ok) {
+            const data = await res.json();
+            alert(data.detail || 'Error al descartar documento.');
+          }
           closeModalDiscard();
           loadAmbiguous();
           pollStatus();
@@ -1137,7 +1246,7 @@
 
               <!-- Botones de Acción: Confirmar Descarte vs Rescatar -->
               <div class="pt-2 flex items-center space-x-3">
-                <button onclick="dismissDiscarded('${item.id}', '${escapeHtml(item.filename)}')" class="flex-1 bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white font-medium py-2.5 px-3 rounded-xl text-xs transition border border-slate-600 flex items-center justify-center gap-1.5 shadow-sm" title="Dar la razón al sistema y retirar este documento de la lista de revisión">
+                <button onclick="dismissDiscarded('${item.id}', ${jsArg(item.filename)})" class="flex-1 bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white font-medium py-2.5 px-3 rounded-xl text-xs transition border border-slate-600 flex items-center justify-center gap-1.5 shadow-sm" title="Dar la razón al sistema y retirar este documento de la lista de revisión">
                   <i class="fa-solid fa-check-double text-slate-400"></i>
                   <span>Confirmar Descarte</span>
                 </button>
@@ -1412,8 +1521,23 @@
         const data = await res.json();
         const rules = data.rules || {};
         const keys = Object.keys(rules);
+        const formats = await fetch('/api/rejected_formats').then(r => r.json());
+        const formatsHtml = formats.map(f => `
+          <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-3 shadow-sm">
+            <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+              <h4 class="font-bold text-white text-sm flex items-center gap-2">
+                <i class="fa-solid fa-ban text-rose-400 text-sm"></i>
+                No es factura: ${escapeHtml(f.origin_document || f.format)}
+              </h4>
+              <button onclick="forgetRejectedFormat('${f.id}')" class="text-rose-400 hover:text-rose-300 text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition shrink-0">
+                <i class="fa-solid fa-trash-can"></i> Olvidar
+              </button>
+            </div>
+            <p class="text-xs text-slate-300">Si un documento con este formato de <strong>${escapeHtml(f.sender)}</strong> vuelve a llegar sin pasar la validación, se ignora sin mostrártelo.</p>
+          </div>
+        `).join('');
 
-        if (keys.length === 0) {
+        if (keys.length === 0 && formats.length === 0) {
           container.innerHTML = `
             <div class="col-span-2 bg-slate-800/40 border border-slate-700/40 rounded-xl p-8 text-center space-y-2">
               <div class="w-12 h-12 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl mx-auto">
@@ -1465,10 +1589,20 @@
               </div>
             </div>
           `;
-        }).join('');
+        }).join('') + formatsHtml;
 
       } catch (e) {
         container.innerHTML = '<div class="text-rose-400 text-sm">Error cargando reglas.</div>';
+      }
+    }
+
+    async function forgetRejectedFormat(formatId) {
+      if (!confirm('¿Olvidar este formato? Si vuelve a llegar, te lo enseñará de nuevo.')) return;
+      try {
+        await fetch(`/api/rejected_formats/${formatId}`, { method: 'DELETE' });
+        loadRules();
+      } catch (e) {
+        alert('Error al olvidar el formato.');
       }
     }
 
@@ -1571,6 +1705,11 @@
       } catch (e) {
         alert('Fallo de conexión.');
       }
+    }
+
+    // Texto como argumento dentro de un onclick: un apóstrofo no rompe el botón
+    function jsArg(str) {
+      return escapeHtml(JSON.stringify(String(str ?? '')));
     }
 
     function escapeHtml(str) {

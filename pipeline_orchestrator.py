@@ -39,7 +39,8 @@ def get_pipeline_state() -> dict:
         state["stats"] = data_manager.get_stats()
         if not state.get("session_summary"):
             # Panel recién abierto (sin sesión): mostrar las últimas del historial persistente
-            state["session_summary"] = data_manager.get_history(limit=15)
+            recent = [e for e in data_manager.get_history(limit=500) if e.get("status") != "IGNORED_KNOWN_FORMAT"]
+            state["session_summary"] = recent[:15]
         return state
 
 
@@ -101,17 +102,19 @@ def _execute_pipeline_worker() -> None:
 
         with tempfile.TemporaryDirectory(prefix="dashboard_invoices_") as tmp_dir:
             # ── FASE 1: Gmail ──
-            _append_log("Buscando correos no leídos con facturas...", "INFO")
+            _append_log("Buscando correos con facturas...", "INFO")
             uids = invoice_manager.search_invoice_emails(mail)
-            _append_log(f"Se encontraron {len(uids)} correo(s) no leídos para procesar.", "INFO")
+            _append_log(f"Se encontraron {len(uids)} correo(s) pendientes de procesar.", "INFO")
 
+            error_count = 0
             for i, uid in enumerate(uids, 1):
                 _append_log(f"Procesando correo {i} de {len(uids)}...", "INFO")
                 try:
-                    invoice_manager.process_invoice(
+                    error_count += invoice_manager.process_invoice(
                         mail, uid, gemini_client, drive_service, tmp_dir, reference_fps=reference_fps
                     )
                 except Exception as e:
+                    error_count += 1
                     _append_log(f"Error procesando correo UID {uid}: {e}", "ERROR")
 
             with _LOCK:
@@ -130,7 +133,7 @@ def _execute_pipeline_worker() -> None:
 
         ok_count = sum(1 for e in new_entries if e.get("status") == "SUCCESS")
         dup_count = sum(1 for e in new_entries if e.get("status") == "SKIPPED_DUPLICATE")
-        amb_count = sum(1 for e in new_entries if e.get("status") == "AMBIGUOUS_DATE")
+        amb_count = sum(1 for e in new_entries if e.get("status") in ("AMBIGUOUS_DATE", "REVIEW_MISSING_DATA"))
         disc_count = sum(1 for e in new_entries if e.get("status") == "DISCARDED")
 
         parts = [f"{ok_count} facturas archivadas en Drive"]
@@ -138,14 +141,22 @@ def _execute_pipeline_worker() -> None:
             parts.append(f"{dup_count} duplicado(s) omitido(s) (ya estaban en Drive)")
         parts.append(f"{amb_count} dudosas")
         parts.append(f"{disc_count} descartadas")
+        no_doc_count = sum(1 for e in new_entries if e.get("status") == "NO_DOCUMENT")
+        if no_doc_count > 0:
+            parts.append(f"{no_doc_count} correo(s) sin documento")
+        ignored_count = sum(1 for e in new_entries if e.get("status") == "IGNORED_KNOWN_FORMAT")
+        if ignored_count > 0:
+            parts.append(f"{ignored_count} documento(s) ignorado(s) porque no son factura")
+        if error_count > 0:
+            parts.append(f"{error_count} adjunto(s) con error (el correo sigue sin leer y se reintentará)")
         summary_line = f"Fin de ciclo: " + ", ".join(parts) + "."
-        _append_log(summary_line, "SUCCESS" if ok_count > 0 else "INFO")
+        _append_log(summary_line, "WARN" if error_count > 0 else ("SUCCESS" if ok_count > 0 else "INFO"))
 
         with _LOCK:
             _STATE["status"] = "success"
             _STATE["current_step"] = "Completado con éxito"
             _STATE["last_run"] = datetime.now().isoformat(timespec="seconds")
-            _STATE["session_summary"] = new_entries
+            _STATE["session_summary"] = [e for e in new_entries if e.get("status") != "IGNORED_KNOWN_FORMAT"]
 
     except Exception as e:
         err_msg = str(e)

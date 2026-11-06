@@ -4,5 +4,6 @@
   },
   "tax_id_map": {
     "ESB12345678": "NOMBRE COMERCIAL DESEADO"
-  }
+  },
+  "own_tax_ids": ["CIF DE TU PROPIA EMPRESA"]
 }
