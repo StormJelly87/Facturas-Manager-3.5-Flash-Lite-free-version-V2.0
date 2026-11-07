@@ -1,485 +1,1350 @@
 <!DOCTYPE html>
-<html lang="es" class="h-full bg-slate-900 text-slate-100">
+<html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>Invoice Manager — Panel de Control & Calidad</title>
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tema elegido por el usuario (claro u oscuro); si no eligió, se sigue a Windows
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('panelTheme'); } catch (e) {}
+      var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#eef2ff',
-              500: '#6366f1',
-              600: '#4f46e5',
-              700: '#4338ca',
-            }
-          }
-        }
+  <style>
+    /* ══════════════════════════════════════════════════════════════════════
+       Sistema de diseño
+       Estética: diagram-design (papel editorial, tinta, un único acento,
+       bordes finos en lugar de sombras, serif para títulos, mono para datos).
+       Movimiento: principios de Emil Kowalski / Apple (curvas ease-out
+       fuertes, muelles casi sin rebote, solo transform y opacity).
+       ══════════════════════════════════════════════════════════════════════ */
+    :root {
+      --paper: #f5f5f5;
+      --paper-2: #ececec;
+      --surface: #ffffff;
+      --surface-sunk: #f8f8f7;
+      --ink: #2d3142;
+      --ink-strong: #111111;
+      --muted: #4f5d75;
+      --soft: #5a6580;
+      --rule: rgba(45, 49, 66, 0.12);
+      --rule-strong: rgba(45, 49, 66, 0.22);
+      --accent: #bf4520;
+      --accent-hover: #a83b1a;
+      --accent-tint: rgba(191, 69, 32, 0.08);
+      --on-accent: #ffffff;
+      --link: #2e5aa8;
+      --ok: #3a6845;
+      --ok-hover: #31593b;
+      --ok-tint: rgba(58, 104, 69, 0.09);
+      --warn: #8a5a12;
+      --warn-tint: rgba(184, 145, 90, 0.16);
+      --danger: #a8372a;
+      --danger-tint: rgba(168, 55, 42, 0.08);
+      --info: #2e5aa8;
+      --info-tint: rgba(46, 90, 168, 0.08);
+      --dots: rgba(45, 49, 66, 0.085);
+      --header-bg: rgba(245, 245, 245, 0.78);
+      --backdrop: rgba(29, 32, 43, 0.38);
+      --focus: rgba(45, 49, 66, 0.16);
+      --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%234f5d75' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+      /* Terminal (piel "terminal" de diagram-design) */
+      --term-page: #0f0f10;
+      --term-paper: #141414;
+      --term-bar: #1b1b1b;
+      --term-border: #2b2b2b;
+      --term-ink: #d6d6d6;
+      --term-muted: #9a9a9a;
+      color-scheme: light;
+
+      /* Tipografía */
+      --font-serif: 'Instrument Serif', 'Noto Serif', Georgia, serif;
+      --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --font-mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+      /* Movimiento */
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+      --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+      --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+      /* Muelle tipo iOS: amortiguación 0.86, rebote ~4 % (casi imperceptible) */
+      --spring: linear(0, 0.188, 0.3486, 0.4849, 0.5995, 0.6951, 0.7741, 0.8388, 0.8912, 0.933, 0.966, 0.9915, 1.0107, 1.0249, 1.0348, 1.0414, 1.0454, 1.0472, 1.0473, 1.0463, 1.0444, 1.0419, 1.0389, 1.0358, 1.0326, 1.0293, 1.0262, 1.0232, 1.0204, 1.0178, 1.0154, 1.0132, 1.0113, 1.0095, 1.008, 1.0067, 1.0055, 1.0045, 1.0036, 1.0029, 1);
+      /* Muelle algo más vivo, solo para el interruptor */
+      --spring-lively: linear(0, 0.2271, 0.4241, 0.5918, 0.7315, 0.8455, 0.9362, 1.0062, 1.0584, 1.0954, 1.1197, 1.1336, 1.1394, 1.1388, 1.1334, 1.1247, 1.1138, 1.1017, 1.089, 1.0764, 1.0643, 1.053, 1.0426, 1.0334, 1.0253, 1.0184, 1.0126, 1.0078, 1.0039, 1.0009, 0.9986, 0.9969, 0.9958, 0.9951, 0.9947, 0.9946, 0.9948, 0.995, 0.9954, 0.9959, 1);
+    }
+
+    @supports not (transition-timing-function: linear(0, 1)) {
+      :root { --spring: var(--ease-out); --spring-lively: var(--ease-out); }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --paper: #262a38;
+        --paper-2: #2b3040;
+        --surface: #2f3445;
+        --surface-sunk: #2a2e3d;
+        --ink: #f5f5f5;
+        --ink-strong: #1b1d26;
+        --muted: #c3c6cf;
+        --soft: #a3abbd;
+        --rule: rgba(245, 245, 245, 0.10);
+        --rule-strong: rgba(245, 245, 245, 0.20);
+        --accent: #f08a59;
+        --accent-hover: #f49d72;
+        --accent-tint: rgba(240, 138, 89, 0.10);
+        --on-accent: #1b1d26;
+        --link: #8fb2e6;
+        --ok: #8fc49b;
+        --ok-hover: #a2d0ac;
+        --ok-tint: rgba(143, 196, 155, 0.10);
+        --warn: #e3b268;
+        --warn-tint: rgba(227, 178, 104, 0.10);
+        --danger: #f0907f;
+        --danger-tint: rgba(240, 144, 127, 0.10);
+        --info: #8fb2e6;
+        --info-tint: rgba(143, 178, 230, 0.10);
+        --dots: rgba(245, 245, 245, 0.06);
+        --header-bg: rgba(38, 42, 56, 0.78);
+        --backdrop: rgba(10, 11, 16, 0.55);
+        --focus: rgba(245, 245, 245, 0.18);
+        --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23c3c6cf' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        --term-border: #34384a;
+        color-scheme: dark;
       }
     }
-  </script>
-  <style>
-    /* Custom scrollbars */
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    :root[data-theme="dark"] {
+      --paper: #262a38; --paper-2: #2b3040; --surface: #2f3445; --surface-sunk: #2a2e3d;
+      --ink: #f5f5f5; --ink-strong: #1b1d26; --muted: #c3c6cf; --soft: #a3abbd;
+      --rule: rgba(245, 245, 245, 0.10); --rule-strong: rgba(245, 245, 245, 0.20);
+      --accent: #f08a59; --accent-hover: #f49d72; --accent-tint: rgba(240, 138, 89, 0.10); --on-accent: #1b1d26;
+      --link: #8fb2e6; --ok: #8fc49b; --ok-hover: #a2d0ac; --ok-tint: rgba(143, 196, 155, 0.10);
+      --warn: #e3b268; --warn-tint: rgba(227, 178, 104, 0.10); --danger: #f0907f; --danger-tint: rgba(240, 144, 127, 0.10);
+      --info: #8fb2e6; --info-tint: rgba(143, 178, 230, 0.10); --dots: rgba(245, 245, 245, 0.06);
+      --header-bg: rgba(38, 42, 56, 0.78); --backdrop: rgba(10, 11, 16, 0.55); --focus: rgba(245, 245, 245, 0.18);
+      --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23c3c6cf' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      --term-border: #34384a;
+      color-scheme: dark;
+    }
+
+    /* ── Base ─────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-feature-settings: "ss01";
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; background: none; border: 0; padding: 0; }
+    a { color: var(--link); text-decoration: none; }
+    p, h1, h2, h3, h4 { margin: 0; }
+    strong { font-weight: 600; }
+    .hidden { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .mono { font-family: var(--font-mono); }
+    .num { font-variant-numeric: tabular-nums; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 6px; }
+
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+    ::-webkit-scrollbar-thumb:hover { background-color: var(--soft); }
+
+    /* ── Cabecera (material translúcido, estilo Apple) ───────────────── */
+    .app-header {
+      position: relative;
+      z-index: 20;
+      flex-shrink: 0;
+      height: 64px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: var(--header-bg);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--rule);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark {
+      width: 36px; height: 36px; flex-shrink: 0;
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--paper);
+      display: grid; place-items: center;
+      font-size: 15px;
+    }
+    .brand-title {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      font-size: 24px;
+      line-height: 1;
+      letter-spacing: -0.01em;
+      display: flex; align-items: center; gap: 10px;
+      white-space: nowrap;
+    }
+    .brand-sub { font-size: 12px; color: var(--soft); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+    .status-chip {
+      display: inline-flex; align-items: center; gap: 9px;
+      height: 36px; padding: 0 12px 0 12px;
+      border-radius: 8px;
+      border: 1px solid var(--rule);
+      background: var(--surface);
+      font-size: 13px; font-weight: 500;
+      transition: transform 160ms var(--ease-out), border-color 200ms ease, background-color 200ms ease;
+    }
+    .status-chip:active { transform: scale(0.97); }
+    .status-chip .chip-arrow { font-size: 10px; color: var(--soft); transition: transform 240ms var(--ease-out); }
+    @media (hover: hover) and (pointer: fine) {
+      .status-chip:hover { border-color: var(--rule-strong); }
+      .status-chip:hover .chip-arrow { transform: translateX(2px); }
+    }
+
+    .icon-btn {
+      position: relative;
+      width: 36px; height: 36px; flex-shrink: 0;
+      border-radius: 8px;
+      border: 1px solid var(--rule);
+      background: var(--surface);
+      color: var(--muted);
+      display: grid; place-items: center;
+      overflow: hidden;
+      transition: transform 160ms var(--ease-out), border-color 200ms ease, color 200ms ease;
+    }
+    .icon-btn:active { transform: scale(0.94); }
+    @media (hover: hover) and (pointer: fine) {
+      .icon-btn:hover { border-color: var(--rule-strong); color: var(--ink); }
+    }
+    .icon-btn i {
+      position: absolute;
+      font-size: 14px;
+      transition: transform 560ms var(--spring), opacity 200ms ease, filter 200ms ease;
+    }
+    .theme-ico-sun { opacity: 0; transform: rotate(-90deg) scale(0.6); filter: blur(2px); }
+    .theme-ico-moon { opacity: 1; transform: none; }
+    :root[data-theme="dark"] .theme-ico-sun { opacity: 1; transform: none; filter: none; }
+    :root[data-theme="dark"] .theme-ico-moon { opacity: 0; transform: rotate(90deg) scale(0.6); filter: blur(2px); }
+    /* Cambio de tema: fundido corto de toda la página */
+    ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 320ms; animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+
+    .status-dot {
+      position: relative;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--ok);
+      flex-shrink: 0;
+      transition: background-color 300ms ease;
+    }
+    .status-dot::after {
+      content: '';
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      background: inherit;
+      opacity: 0;
+    }
+    .status-dot[data-state="run"] { background: var(--info); }
+    .status-dot[data-state="run"]::after { animation: dot-ring 1.6s var(--ease-out) infinite; }
+    .status-dot[data-state="warn"] { background: var(--warn); }
+    .status-dot[data-state="error"] { background: var(--danger); }
+    @keyframes dot-ring {
+      0% { transform: scale(1); opacity: 0.55; }
+      100% { transform: scale(2.8); opacity: 0; }
+    }
+
+    /* ── Botones ──────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      height: 36px; padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      font-size: 13px; font-weight: 500; line-height: 1;
+      white-space: nowrap;
+      user-select: none;
+      transition:
+        transform 160ms var(--ease-out),
+        background-color 200ms ease,
+        border-color 200ms ease,
+        color 200ms ease,
+        opacity 200ms ease;
+    }
+    .btn:active:not(:disabled) { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn i { font-size: 12px; }
+    .btn-lg { height: 42px; padding: 0 16px; font-size: 13.5px; }
+    .btn-sm { height: 30px; padding: 0 10px; font-size: 12px; border-radius: 7px; }
+    .btn-block { width: 100%; }
+    .btn-flex { flex: 1 1 0; }
+
+    .btn-primary { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+    .btn-ok { background: var(--ok); color: var(--surface); font-weight: 600; }
+    .btn-ink { background: var(--ink); color: var(--paper); font-weight: 600; }
+    .btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--rule); }
+    .btn-quiet { background: transparent; color: var(--muted); border-color: var(--rule); }
+    .btn-danger { background: var(--danger-tint); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 22%, transparent); }
+    @media (hover: hover) and (pointer: fine) {
+      .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+      .btn-ok:hover:not(:disabled) { background: var(--ok-hover); }
+      .btn-ink:hover:not(:disabled) { opacity: 0.88; }
+      .btn-ghost:hover:not(:disabled), .btn-quiet:hover:not(:disabled) { border-color: var(--rule-strong); color: var(--ink); background: var(--surface); }
+      .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+    }
+
+    .link-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--link);
+      font-size: 12.5px; font-weight: 500;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 3px;
+      transition: text-decoration-color 200ms ease, transform 160ms var(--ease-out);
+      white-space: nowrap;
+    }
+    .link-btn:active { transform: scale(0.97); }
+    @media (hover: hover) and (pointer: fine) {
+      .link-btn:hover { text-decoration-color: currentColor; }
+    }
+
+    /* ── Etiquetas (rectangulares, rx 2, como en diagram-design) ─────── */
+    .tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 7px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 10.5px; font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      line-height: 1.35;
+      white-space: nowrap;
+      color: var(--muted);
+      background: var(--paper-2);
+      border: 1px solid var(--rule);
+    }
+    .tag::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .tag.no-dot::before { display: none; }
+    .tag-ok { color: var(--ok); background: var(--ok-tint); border-color: color-mix(in srgb, var(--ok) 24%, transparent); }
+    .tag-warn { color: var(--warn); background: var(--warn-tint); border-color: color-mix(in srgb, var(--warn) 24%, transparent); }
+    .tag-danger { color: var(--danger); background: var(--danger-tint); border-color: color-mix(in srgb, var(--danger) 22%, transparent); }
+    .tag-info { color: var(--info); background: var(--info-tint); border-color: color-mix(in srgb, var(--info) 22%, transparent); }
+    .tag-accent { color: var(--accent); background: var(--accent-tint); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+    .tag-live::before { animation: live-pulse 2s ease-in-out infinite; }
+    @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 10.5px; font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--soft);
+    }
+
+    /* Contadores del menú lateral */
+    .count {
+      min-width: 22px; height: 20px; padding: 0 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 11px; font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      background: var(--paper-2);
+      border: 1px solid var(--rule);
+    }
+    .count-warn { color: var(--warn); background: var(--warn-tint); border-color: color-mix(in srgb, var(--warn) 28%, transparent); }
+    .count-danger { color: var(--danger); background: var(--danger-tint); border-color: color-mix(in srgb, var(--danger) 24%, transparent); }
+
+    /* ── Estructura ───────────────────────────────────────────────────── */
+    .app-body { display: flex; flex: 1; min-height: 0; }
+
+    .sidebar {
+      width: 252px; flex-shrink: 0;
+      padding: 16px 12px;
+      display: flex; flex-direction: column; justify-content: space-between; gap: 16px;
+      border-right: 1px solid var(--rule);
+      background: var(--paper);
+      overflow-y: auto;
+    }
+    .nav { position: relative; display: flex; flex-direction: column; gap: 2px; }
+    .nav-indicator {
+      position: absolute; left: 0; right: 0; top: 0;
+      height: 40px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 560ms var(--spring), opacity 200ms ease;
+      will-change: transform;
+    }
+    .nav-item {
+      position: relative; z-index: 1;
+      height: 40px; width: 100%;
+      padding: 0 10px 0 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      border-radius: 8px;
+      font-size: 13.5px; font-weight: 500;
+      color: var(--muted);
+      text-align: left;
+      transition: color 200ms ease, background-color 200ms ease, transform 160ms var(--ease-out);
+    }
+    .nav-item:active { transform: scale(0.98); }
+    .nav-item .nav-label { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .nav-item .nav-label i { width: 16px; text-align: center; font-size: 13px; color: var(--soft); transition: color 200ms ease; }
+    .nav-item.is-active { color: var(--ink); }
+    .nav-item.is-active .nav-label i { color: var(--accent); }
+    @media (hover: hover) and (pointer: fine) {
+      .nav-item:not(.is-active):hover { color: var(--ink); background: color-mix(in srgb, var(--paper-2) 70%, transparent); }
+    }
+
+    .side-info {
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 12px;
+      font-size: 12px;
+      display: grid; gap: 8px;
+    }
+    .side-info-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--soft); }
+    .side-info-row b { font-weight: 600; color: var(--ink); text-align: right; }
+    .side-info-row .ok { color: var(--ok); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    .side-info-row .ok::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .main {
+      flex: 1; min-width: 0;
+      overflow-y: auto;
+      padding: 28px 32px 48px;
+      background-color: var(--paper);
+      background-image: radial-gradient(circle at 1px 1px, var(--dots) 1px, transparent 0);
+      background-size: 22px 22px;
+    }
+    .main-inner { max-width: 1360px; margin: 0 auto; }
+    .tab-pane { display: flex; flex-direction: column; gap: 20px; }
+    .pane-narrow { max-width: 820px; }
+
+    /* Cabecera de cada sección */
+    .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .page-title {
+      display: flex; align-items: center; gap: 12px;
+      font-family: var(--font-serif);
+      font-weight: 400;
+      font-size: 34px;
+      line-height: 1.05;
+      letter-spacing: -0.015em;
+    }
+    .title-ico {
+      width: 34px; height: 34px; flex-shrink: 0;
+      border-radius: 8px;
+      border: 1px solid var(--rule);
+      background: var(--surface);
+      display: grid; place-items: center;
+      font-size: 14px;
+    }
+    .page-desc { margin-top: 8px; color: var(--soft); font-size: 13.5px; max-width: 78ch; }
+    .page-actions { display: flex; align-items: center; gap: 8px; }
+
+    .c-ok { color: var(--ok); } .c-warn { color: var(--warn); } .c-danger { color: var(--danger); }
+    .c-info { color: var(--info); } .c-accent { color: var(--accent); } .c-ink { color: var(--ink); } .c-soft { color: var(--soft); }
+
+    /* ── Tarjetas ─────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .card-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--rule);
+    }
+    .card-title { display: flex; align-items: center; gap: 10px; font-size: 14.5px; font-weight: 600; letter-spacing: -0.005em; }
+    .card-title i { color: var(--soft); font-size: 13px; }
+    .card-pad { padding: 20px; }
+
+    /* Estadísticas: anchos variados, número en serif */
+    .stats { display: grid; grid-template-columns: 1.2fr 1fr 1fr 0.92fr; gap: 12px; }
+    .stat {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 16px 18px 18px;
+      display: flex; flex-direction: column; gap: 14px;
+      min-width: 0;
+    }
+    .stat-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .stat-ico {
+      width: 28px; height: 28px; flex-shrink: 0;
+      border-radius: 7px;
+      display: grid; place-items: center;
+      font-size: 12px;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+    }
+    .stat-value { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+    .stat-num {
+      display: inline-block;
+      font-family: var(--font-serif);
+      font-size: 52px;
+      line-height: 0.9;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+    .stat-unit { font-size: 12.5px; color: var(--soft); }
+    .stat.is-focal { border-color: color-mix(in srgb, var(--warn) 30%, var(--rule)); }
+    .stat.is-focal::before {
+      content: ''; position: absolute; left: -1px; top: 14px; bottom: 14px; width: 2px;
+      border-radius: 2px; background: var(--warn);
+    }
+
+    /* Barra de filtros */
+    .filters {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--surface-sunk);
+    }
+
+    /* ── Campos de formulario ─────────────────────────────────────────── */
+    .field-label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+    .field-label.upper { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--soft); }
+    .input, .select, .textarea {
+      width: 100%;
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 8px;
+      border: 1px solid var(--rule-strong);
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 13px;
+      outline: 3px solid transparent;
+      outline-offset: 0;
+      transition: border-color 160ms ease, outline-color 200ms ease, background-color 200ms ease;
+    }
+    .input-sm, .select.select-sm { height: 32px; font-size: 12.5px; }
+    .textarea { height: auto; padding: 9px 12px; resize: vertical; line-height: 1.45; }
+    .input::placeholder, .textarea::placeholder { color: var(--soft); opacity: 0.8; }
+    .input:focus, .select:focus, .textarea:focus { border-color: var(--ink); outline-color: var(--focus); }
+    .input[type="date"] { font-family: var(--font-mono); font-size: 12.5px; }
+    .input[type="number"] { font-variant-numeric: tabular-nums; }
+    .select {
+      appearance: none; -webkit-appearance: none;
+      padding-right: 32px;
+      background-image: var(--chevron);
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      cursor: pointer;
+    }
+    .search { position: relative; flex: 1 1 220px; min-width: 200px; }
+    .search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--soft); pointer-events: none; }
+    .search .input { padding-left: 34px; }
+
+    /* Interruptor estilo iOS */
+    .switch { position: relative; display: inline-flex; cursor: pointer; flex-shrink: 0; }
+    .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .switch-track {
+      position: relative;
+      width: 48px; height: 28px;
+      border-radius: 999px;
+      background: var(--rule-strong);
+      transition: background-color 260ms ease;
+    }
+    .switch-knob {
+      position: absolute; top: 2px; left: 2px;
+      width: 24px; height: 24px;
+      border-radius: 999px;
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      transition: transform 520ms var(--spring-lively), width 200ms var(--ease-out);
+    }
+    .switch input:checked + .switch-track { background: var(--ok); }
+    .switch input:checked + .switch-track .switch-knob { transform: translateX(20px); }
+    .switch:active .switch-knob { width: 29px; }
+    .switch:active input:checked + .switch-track .switch-knob { transform: translateX(15px); }
+    .switch input:focus-visible + .switch-track { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+    /* ── Tablas ───────────────────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table.tbl { width: 100%; border-collapse: collapse; text-align: left; }
+    .tbl thead th {
+      padding: 10px 16px;
+      font-family: var(--font-mono);
+      font-size: 10.5px; font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--soft);
+      background: var(--surface-sunk);
+      border-bottom: 1px solid var(--rule);
+      white-space: nowrap;
+      user-select: none;
+    }
+    .tbl thead th.sortable { cursor: pointer; transition: color 160ms ease, background-color 160ms ease; }
+    .tbl .th-inner { display: inline-flex; align-items: center; gap: 7px; }
+    .tbl .th-inner.end { justify-content: flex-end; width: 100%; }
+    .sort-ico { font-size: 10px; color: var(--rule-strong); transition: color 160ms ease; }
+    .sort-ico.is-on { color: var(--accent); }
+    @media (hover: hover) and (pointer: fine) {
+      .tbl thead th.sortable:hover { color: var(--ink); }
+      .tbl thead th.sortable:hover .sort-ico:not(.is-on) { color: var(--soft); }
+    }
+    .tbl tbody td { padding: 12px 16px; border-bottom: 1px solid var(--rule); vertical-align: middle; font-size: 13px; }
+    .tbl tbody tr:last-child td { border-bottom: 0; }
+    .tbl tbody tr { transition: background-color 160ms ease; }
+    @media (hover: hover) and (pointer: fine) {
+      .tbl tbody tr:hover { background: color-mix(in srgb, var(--paper-2) 55%, transparent); }
+    }
+    .td-file { max-width: 320px; }
+    .file-name { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
+    .file-sub { font-size: 11.5px; color: var(--soft); margin-top: 2px; }
+    .td-strong { font-weight: 600; white-space: nowrap; }
+    .td-amount { text-align: right; white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .td-end { text-align: right; }
+    .path { font-family: var(--font-mono); font-size: 12px; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+    .path i { font-size: 11px; }
+    .path-note { font-family: var(--font-sans); color: var(--soft); font-size: 11.5px; margin-top: 2px; }
+    .reason { font-size: 12.5px; color: var(--soft); font-style: italic; }
+    .reason-warn { color: var(--warn); }
+    .muted-dash { color: var(--soft); opacity: 0.7; }
+    .t-month { font-weight: 600; white-space: nowrap; }
+    .t-month small { font-family: var(--font-mono); font-size: 11px; color: var(--soft); font-weight: 400; margin-left: 4px; }
+    .t-time { font-family: var(--font-mono); font-size: 11.5px; color: var(--soft); white-space: nowrap; }
+    .action-note { font-size: 12.5px; color: var(--soft); white-space: nowrap; }
+
+    /* Estado vacío */
+    .empty {
+      padding: 40px 24px;
+      text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      color: var(--soft);
+    }
+    .empty-ico {
+      width: 44px; height: 44px; border-radius: 10px;
+      display: grid; place-items: center;
+      font-size: 17px;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+      margin-bottom: 4px;
+    }
+    .empty h3 { font-family: var(--font-serif); font-weight: 400; font-size: 24px; color: var(--ink); letter-spacing: -0.01em; }
+    .empty p { font-size: 13px; max-width: 60ch; }
+    .empty-card { background: var(--surface); border: 1px dashed var(--rule-strong); border-radius: 10px; }
+    .loading { font-size: 13px; color: var(--soft); padding: 16px 2px; display: flex; align-items: center; gap: 10px; }
+    .loading::before {
+      content: ''; width: 12px; height: 12px; border-radius: 50%;
+      border: 1.5px solid var(--rule-strong); border-top-color: var(--ink);
+      animation: spin 800ms linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-text { color: var(--danger); font-size: 13px; padding: 12px 2px; }
+
+    /* ── Terminal ─────────────────────────────────────────────────────── */
+    .terminal {
+      background: var(--term-paper);
+      border: 1px solid var(--term-border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .terminal-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      height: 42px; padding: 0 14px;
+      background: var(--term-bar);
+      border-bottom: 1px solid var(--term-border);
+    }
+    .terminal-dots { display: flex; gap: 6px; }
+    .terminal-dots span { width: 10px; height: 10px; border-radius: 50%; background: #3a3a3a; }
+    .terminal-dots span:first-child { background: #ff5a36; }
+    .terminal-title { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; font-family: var(--font-mono); font-size: 12px; color: var(--term-ink); }
+    .terminal-title i { color: var(--term-muted); font-size: 11px; }
+    .terminal-step { font-family: var(--font-mono); font-size: 11.5px; color: var(--term-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+    .terminal-body {
+      height: 272px; overflow-y: auto;
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 12px; line-height: 1.7;
+      color: var(--term-ink);
+    }
+    .terminal-body::-webkit-scrollbar-thumb { background-color: #3a3a3a; }
+    .terminal-body > div { white-space: pre-wrap; word-break: break-word; }
+    .log-muted { color: #8a8a8a; }
+    .log-error { color: #ff6a4a; font-weight: 600; }
+    .log-warn { color: #e8b65c; }
+    .log-success { color: #8fc49b; font-weight: 600; }
+    .log-drive { color: #8fb2e6; font-weight: 500; }
+    .log-dudosa { color: #e8b65c; font-weight: 500; }
+    .log-discard { color: #f0907f; }
+    .log-sched { color: #8fb2e6; font-weight: 500; }
+
+    /* ── Tarjetas de revisión (Dudosas y Descartadas) ─────────────────── */
+    .review {
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+      gap: 24px;
+    }
+    .viewer {
+      min-height: 420px;
+      height: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--rule);
+      background: var(--paper-2);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .viewer-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      height: 36px; padding: 0 12px;
+      border-bottom: 1px solid var(--rule);
+      background: var(--surface-sunk);
+      font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);
+    }
+    .viewer-bar a { font-family: var(--font-sans); font-size: 12px; font-weight: 500; flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; }
+    .viewer-bar a i { font-size: 10px; transition: transform 240ms var(--ease-out); }
+    @media (hover: hover) and (pointer: fine) {
+      .viewer-bar a:hover i { transform: translate(2px, -2px); }
+    }
+    .viewer iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+
+    .review-side { display: flex; flex-direction: column; justify-content: space-between; gap: 18px; min-width: 0; padding: 4px 4px 2px 0; }
+    .review-top { display: flex; flex-direction: column; gap: 12px; }
+    .review-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .review-supplier { font-family: var(--font-serif); font-weight: 400; font-size: 30px; line-height: 1.05; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+    .review-text { font-size: 13px; color: var(--muted); }
+    .kv { display: grid; gap: 4px; font-size: 12.5px; color: var(--soft); }
+    .kv strong { color: var(--muted); font-weight: 600; }
+    .divider { border-top: 1px solid var(--rule); padding-top: 14px; }
+    .stack { display: grid; gap: 12px; }
+
+    .options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 2px; }
+    .option {
+      position: relative;
+      text-align: left;
+      padding: 14px 14px 15px;
+      border-radius: 9px;
+      border: 1px solid var(--rule-strong);
+      background: var(--surface);
+      transition: transform 160ms var(--ease-out), border-color 200ms ease, background-color 200ms ease;
+    }
+    .option:active { transform: scale(0.97); }
+    .option-label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--soft); transition: color 200ms ease; }
+    .option-value { margin-top: 6px; font-size: 15px; font-weight: 600; color: var(--ink); letter-spacing: -0.005em; }
+    .option-arrow { position: absolute; right: 14px; top: 50%; transform: translate(-4px, -50%); opacity: 0; font-size: 12px; color: var(--accent); transition: transform 240ms var(--ease-out), opacity 200ms ease; }
+    @media (hover: hover) and (pointer: fine) {
+      .option:hover { border-color: var(--ink); background: var(--surface-sunk); }
+      .option:hover .option-label { color: var(--accent); }
+      .option:hover .option-arrow { opacity: 1; transform: translate(0, -50%); }
+    }
+
+    .inline-row { display: flex; align-items: center; gap: 8px; }
+    .inline-row .input { flex: 1; }
+
+    .review-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--rule); padding-top: 14px; }
+    .review-foot .folder { font-size: 12px; color: var(--soft); min-width: 0; }
+    .review-foot .folder span { font-family: var(--font-mono); color: var(--ink); }
+    .actions-row { display: flex; align-items: center; gap: 10px; }
+
+    .note {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 11px 13px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+      color: var(--muted);
+    }
+    .note i { margin-top: 2px; font-size: 13px; flex-shrink: 0; }
+    .note strong { color: var(--ink); }
+    .note-title { display: block; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+    .note-ok { background: var(--ok-tint); border-color: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+    .note-ok strong { color: inherit; }
+    .note-danger { background: var(--danger-tint); border-color: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
+    .note-danger strong, .note-danger .note-title { color: inherit; }
+    .note-warn { background: var(--warn-tint); border-color: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+    .note-info { background: var(--surface); }
+    .note-info i { color: var(--accent); }
+    .section-label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); font-weight: 500; }
+
+    /* ── Reglas ───────────────────────────────────────────────────────── */
+    .rules-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+    .rule-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+    .rule-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+    .rule-name { font-family: var(--font-serif); font-weight: 400; font-size: 24px; line-height: 1.1; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; overflow-wrap: anywhere; }
+    .rule-name i { font-size: 13px; color: var(--soft); }
+    .rule-name.small { font-family: var(--font-sans); font-size: 14px; font-weight: 600; letter-spacing: 0; line-height: 1.35; }
+    .rule-date { font-family: var(--font-mono); font-size: 11px; color: var(--soft); margin-top: 4px; display: block; }
+    .rule-block { border-radius: 8px; background: var(--paper); border: 1px solid var(--rule); padding: 12px; display: grid; gap: 6px; }
+    .rule-block-title { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; display: flex; align-items: center; gap: 7px; font-weight: 500; }
+    .rule-block p, .rule-block li { font-size: 12.5px; color: var(--muted); }
+    .rule-block ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+    .rule-block strong { color: var(--ink); }
+    .hl { color: var(--accent); font-weight: 600; font-family: var(--font-mono); font-size: 12px; }
+    .hl-ok { color: var(--ok); font-weight: 600; }
+
+    /* ── Programador ──────────────────────────────────────────────────── */
+    .sched-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 20px; display: grid; gap: 14px; }
+    .sched-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 10px; }
+    .sched-cell { border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); padding: 12px 14px; }
+    .sched-cell .eyebrow { font-size: 10px; }
+    .sched-cell .val { display: block; margin-top: 6px; font-size: 15px; font-weight: 600; letter-spacing: -0.005em; }
+    .form-card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+    .form-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--rule); }
+    .form-row-title { font-weight: 600; font-size: 14px; }
+    .form-row-sub { font-size: 12.5px; color: var(--soft); margin-top: 2px; }
+    .form-body { padding: 20px; display: grid; gap: 16px; }
+    .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-foot { padding: 14px 20px; border-top: 1px solid var(--rule); display: flex; justify-content: flex-end; background: var(--surface-sunk); }
+    .collapse { overflow: hidden; }
+
+    /* ── Ventanas modales ─────────────────────────────────────────────── */
+    .modal {
+      position: fixed; inset: 0; z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop {
+      position: absolute; inset: 0;
+      background: var(--backdrop);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      opacity: 0;
+      transition: opacity 260ms var(--ease-out);
+    }
+    .modal-panel {
+      position: relative;
+      width: 100%; max-width: 440px;
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      padding: 24px;
+      display: grid; gap: 18px;
+      opacity: 0;
+      transform: translateY(10px) scale(0.96);
+      transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+    }
+    .modal:not(.is-open) { pointer-events: none; }
+    .modal.is-open .modal-backdrop { opacity: 1; }
+    .modal.is-open .modal-panel {
+      opacity: 1;
+      transform: none;
+      transition: opacity 220ms var(--ease-out), transform 620ms var(--spring);
+    }
+    .modal-ico { width: 46px; height: 46px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; margin: 0 auto; border: 1px solid; }
+    .modal-ico.warn { color: var(--warn); background: var(--warn-tint); border-color: color-mix(in srgb, var(--warn) 22%, transparent); }
+    .modal-ico.danger { color: var(--danger); background: var(--danger-tint); border-color: color-mix(in srgb, var(--danger) 22%, transparent); }
+    .modal-title { font-family: var(--font-serif); font-weight: 400; font-size: 28px; line-height: 1.1; letter-spacing: -0.015em; text-align: center; }
+    .modal-text { font-size: 13.5px; color: var(--muted); text-align: center; margin-top: 8px; }
+    .modal-text strong { color: var(--ink); }
+    .modal .note { margin-top: 12px; text-align: left; }
+    .modal-actions { display: flex; gap: 10px; }
+
+    /* Entradas nuevas en tablas y registro */
+    @keyframes row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @keyframes log-in { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+    .row-new { animation: row-in 360ms var(--ease-out) backwards; }
+    .log-new { animation: log-in 260ms var(--ease-out) backwards; }
+
+    /* ── Adaptación a pantallas pequeñas ──────────────────────────────── */
+    @media (max-width: 1180px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .review { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 900px) {
+      .sidebar { width: 72px; padding: 12px 10px; }
+      .nav-item { justify-content: center; padding: 0; }
+      .nav-item .nav-label span, .side-info { display: none; }
+      .nav-item .count { position: absolute; top: 1px; right: -4px; min-width: 18px; height: 16px; font-size: 9.5px; padding: 0 4px; border-radius: 8px; background: var(--surface); }
+      .nav-item .count-warn { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); }
+      .nav-item .count-danger { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+      .rules-grid { grid-template-columns: 1fr; }
+      .main { padding: 20px 16px 40px; }
+    }
+    @media (max-width: 640px) {
+      .app-header { padding: 0 16px; height: auto; min-height: 64px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+      .brand-sub, .brand-title .tag { display: none; }
+      .stats { grid-template-columns: 1fr; }
+      .options, .sched-grid, .form-grid-2 { grid-template-columns: 1fr; }
+      .page-title { font-size: 28px; }
+      .terminal-step { display: none; }
+    }
+
+    /* ── Movimiento reducido: solo fundidos, sin desplazamientos ──────── */
+    @media (prefers-reduced-motion: reduce) {
+      .nav-indicator { transition: opacity 200ms ease; }
+      .modal-panel, .modal.is-open .modal-panel { transform: none; transition: opacity 200ms ease; }
+      .switch-knob { transition: transform 1ms linear; }
+      .icon-btn i { transition: opacity 200ms ease; }
+      .btn:active:not(:disabled), .option:active, .status-chip:active, .nav-item:active, .link-btn:active { transform: none; }
+      .row-new, .log-new { animation-name: fade-only; }
+      .status-dot[data-state="run"]::after { animation: none; }
+      @keyframes fade-only { from { opacity: 0; } to { opacity: 1; } }
+    }
   </style>
 </head>
-<body class="h-full flex flex-col font-sans antialiased overflow-hidden">
+<body>
 
-  <!-- Top Navigation Bar -->
-  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700/60 px-6 py-3 flex items-center justify-between shrink-0">
-    <div class="flex items-center space-x-3">
-      <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-500/30">
+  <!-- Barra superior -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-mark">
         <i class="fa-solid fa-file-invoice-dollar"></i>
       </div>
-      <div>
-        <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+      <div style="min-width:0">
+        <h1 class="brand-title">
           Invoice Manager
-          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">v2.0 Flash-Lite</span>
+          <span class="tag no-dot">v2.0 Flash-Lite</span>
         </h1>
-        <p class="text-xs text-slate-400">Gestor Autónomo de Facturas & Control de Calidad</p>
+        <p class="brand-sub">Gestor Autónomo de Facturas & Control de Calidad</p>
       </div>
     </div>
 
-    <!-- Status Indicator (Clickeable para ir a pendientes) & Quick Run Button -->
-    <div class="flex items-center space-x-4">
-      <div id="statusBadge" onclick="goToPendingReview()" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-700/60 border border-slate-600 text-sm cursor-pointer hover:bg-slate-700 transition active:scale-95" title="Haz clic para ir directamente a revisar las tareas pendientes">
-        <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-        <span id="statusText" class="font-medium text-slate-200">Listo</span>
-        <i class="fa-solid fa-arrow-right text-[10px] text-slate-400 ml-1"></i>
-      </div>
+    <!-- Indicador de estado (clic para ir a pendientes) y botón de ejecución -->
+    <div class="header-actions">
+      <button id="themeToggle" onclick="toggleTheme()" class="icon-btn" title="Cambiar a modo oscuro" aria-label="Cambiar a modo oscuro">
+        <i class="fa-solid fa-moon theme-ico-moon"></i>
+        <i class="fa-solid fa-sun theme-ico-sun"></i>
+      </button>
 
-      <button id="btnRunNow" onclick="triggerRun()" class="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-2 rounded-lg shadow-md shadow-indigo-600/30 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-        <i id="btnRunIcon" class="fa-solid fa-play text-sm"></i>
+      <button id="statusBadge" onclick="goToPendingReview()" class="status-chip" title="Haz clic para ir directamente a revisar las tareas pendientes">
+        <span id="statusDot" class="status-dot" data-state="ok"></span>
+        <span id="statusText">Listo</span>
+        <i class="fa-solid fa-arrow-right chip-arrow"></i>
+      </button>
+
+      <button id="btnRunNow" onclick="triggerRun()" class="btn btn-primary">
+        <i id="btnRunIcon" class="fa-solid fa-play"></i>
         <span id="btnRunText">Ejecutar Ahora</span>
       </button>
     </div>
   </header>
 
-  <div class="flex flex-1 overflow-hidden">
-    <!-- Sidebar Navigation -->
-    <aside class="w-64 bg-slate-800/50 border-r border-slate-700/60 flex flex-col justify-between shrink-0 p-3">
-      <nav class="space-y-1.5">
-        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-white bg-indigo-600/20 border border-indigo-500/30">
-          <div class="flex items-center space-x-3">
-            <i class="fa-solid fa-gauge-high w-5 text-indigo-400"></i>
+  <div class="app-body">
+    <!-- Menú lateral -->
+    <aside class="sidebar">
+      <nav class="nav" id="mainNav">
+        <div class="nav-indicator" id="navIndicator" aria-hidden="true"></div>
+
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" title="Panel de Control" aria-label="Panel de Control" class="nav-item is-active">
+          <div class="nav-label">
+            <i class="fa-solid fa-gauge-high"></i>
             <span>Panel de Control</span>
           </div>
         </button>
 
-        <button onclick="switchTab('ambiguous')" id="nav-ambiguous" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
-          <div class="flex items-center space-x-3">
-            <i class="fa-solid fa-calendar-question w-5 text-amber-400"></i>
+        <button onclick="switchTab('ambiguous')" id="nav-ambiguous" title="Facturas Dudosas" aria-label="Facturas Dudosas" class="nav-item">
+          <div class="nav-label">
+            <i class="fa-solid fa-calendar-day"></i>
             <span>Facturas Dudosas</span>
           </div>
-          <span id="badgeAmbiguous" class="hidden text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">0</span>
+          <span id="badgeAmbiguous" class="hidden count count-warn">0</span>
         </button>
 
-        <button onclick="switchTab('discarded')" id="nav-discarded" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
-          <div class="flex items-center space-x-3">
-            <i class="fa-solid fa-triangle-exclamation w-5 text-rose-400"></i>
+        <button onclick="switchTab('discarded')" id="nav-discarded" title="Descartadas" aria-label="Descartadas" class="nav-item">
+          <div class="nav-label">
+            <i class="fa-solid fa-triangle-exclamation"></i>
             <span>Descartadas</span>
           </div>
-          <span id="badgeDiscarded" class="hidden text-xs font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">0</span>
+          <span id="badgeDiscarded" class="hidden count count-danger">0</span>
         </button>
 
-        <button onclick="switchTab('history')" id="nav-history" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
-          <div class="flex items-center space-x-3">
-            <i class="fa-solid fa-check-circle w-5 text-emerald-400"></i>
+        <button onclick="switchTab('history')" id="nav-history" title="Historial Éxito" aria-label="Historial Éxito" class="nav-item">
+          <div class="nav-label">
+            <i class="fa-solid fa-circle-check"></i>
             <span>Historial Éxito</span>
           </div>
-          <span id="badgeHistory" class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">0</span>
+          <span id="badgeHistory" class="count">0</span>
         </button>
 
-        <button onclick="switchTab('rules')" id="nav-rules" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
-          <div class="flex items-center space-x-3">
-            <i class="fa-solid fa-brain w-5 text-purple-400"></i>
+        <button onclick="switchTab('rules')" id="nav-rules" title="Reglas Aprendidas" aria-label="Reglas Aprendidas" class="nav-item">
+          <div class="nav-label">
+            <i class="fa-solid fa-brain"></i>
             <span>Reglas Aprendidas</span>
           </div>
-          <span id="badgeRules" class="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300">0</span>
+          <span id="badgeRules" class="count">0</span>
         </button>
 
-        <button onclick="switchTab('scheduler')" id="nav-scheduler" class="nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition">
-          <div class="flex items-center space-x-3">
-            <i class="fa-solid fa-clock w-5 text-sky-400"></i>
+        <button onclick="switchTab('scheduler')" id="nav-scheduler" title="Programador" aria-label="Programador" class="nav-item">
+          <div class="nav-label">
+            <i class="fa-solid fa-clock"></i>
             <span>Programador</span>
           </div>
         </button>
       </nav>
 
-      <!-- Bottom Info -->
-      <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-700/40 text-xs text-slate-400 space-y-1">
-        <div class="flex items-center justify-between">
+      <!-- Información inferior -->
+      <div class="side-info">
+        <div class="side-info-row">
           <span>Modelo:</span>
-          <span class="text-slate-200 font-semibold">Gemini 3.5 Flash-Lite</span>
+          <b>Gemini 3.5 Flash-Lite</b>
         </div>
-        <div class="flex items-center justify-between">
+        <div class="side-info-row">
           <span>Google Drive:</span>
-          <span class="text-emerald-400 font-semibold"><i class="fa-solid fa-circle-check text-[10px]"></i> Conectado</span>
+          <span class="ok">Conectado</span>
         </div>
       </div>
     </aside>
 
-    <!-- Main Content Area -->
-    <main class="flex-1 overflow-y-auto p-6 bg-slate-900 space-y-6">
+    <!-- Contenido principal -->
+    <main class="main" id="mainScroll">
+      <div class="main-inner">
 
-      <!-- TAB 1: DASHBOARD -->
-      <div id="tab-dashboard" class="tab-pane space-y-6">
-        <!-- Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div class="bg-slate-800/70 border border-slate-700/60 p-4 rounded-xl shadow-sm">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Procesadas con Éxito</span>
-              <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                <i class="fa-solid fa-check"></i>
-              </div>
+      <!-- PESTAÑA 1: PANEL DE CONTROL -->
+      <div id="tab-dashboard" class="tab-pane">
+        <!-- Estadísticas -->
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-top">
+              <span class="eyebrow">Procesadas con Éxito</span>
+              <div class="stat-ico c-ok"><i class="fa-solid fa-check"></i></div>
             </div>
-            <div class="mt-2 flex items-baseline space-x-2">
-              <span id="statSuccess" class="text-2xl font-bold text-white">0</span>
-              <span class="text-xs text-slate-400">facturas</span>
+            <div class="stat-value">
+              <span id="statSuccess" class="stat-num">0</span>
+              <span class="stat-unit">facturas</span>
             </div>
           </div>
 
-          <div class="bg-slate-800/70 border border-slate-700/60 p-4 rounded-xl shadow-sm">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Facturas Dudosas</span>
-              <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                <i class="fa-solid fa-calendar-question"></i>
-              </div>
+          <div class="stat" id="statCardAmbiguous">
+            <div class="stat-top">
+              <span class="eyebrow">Facturas Dudosas</span>
+              <div class="stat-ico c-warn"><i class="fa-solid fa-calendar-day"></i></div>
             </div>
-            <div class="mt-2 flex items-baseline space-x-2">
-              <span id="statAmbiguous" class="text-2xl font-bold text-amber-400">0</span>
-              <span class="text-xs text-slate-400">requieren fecha</span>
+            <div class="stat-value">
+              <span id="statAmbiguous" class="stat-num c-warn">0</span>
+              <span class="stat-unit">requieren fecha</span>
             </div>
           </div>
 
-          <div class="bg-slate-800/70 border border-slate-700/60 p-4 rounded-xl shadow-sm">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Descartadas</span>
-              <div class="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center">
-                <i class="fa-solid fa-filter-circle-xmark"></i>
-              </div>
+          <div class="stat">
+            <div class="stat-top">
+              <span class="eyebrow">Descartadas</span>
+              <div class="stat-ico c-danger"><i class="fa-solid fa-filter-circle-xmark"></i></div>
             </div>
-            <div class="mt-2 flex items-baseline space-x-2">
-              <span id="statDiscarded" class="text-2xl font-bold text-rose-400">0</span>
-              <span class="text-xs text-slate-400">rescatables</span>
+            <div class="stat-value">
+              <span id="statDiscarded" class="stat-num c-danger">0</span>
+              <span class="stat-unit">rescatables</span>
             </div>
           </div>
 
-          <div class="bg-slate-800/70 border border-slate-700/60 p-4 rounded-xl shadow-sm">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reglas Memorizadas</span>
-              <div class="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center">
-                <i class="fa-solid fa-brain"></i>
-              </div>
+          <div class="stat">
+            <div class="stat-top">
+              <span class="eyebrow">Reglas Memorizadas</span>
+              <div class="stat-ico c-ink"><i class="fa-solid fa-brain"></i></div>
             </div>
-            <div class="mt-2 flex items-baseline space-x-2">
-              <span id="statRules" class="text-2xl font-bold text-purple-400">0</span>
-              <span class="text-xs text-slate-400">proveedores aprendidos</span>
+            <div class="stat-value">
+              <span id="statRules" class="stat-num">0</span>
+              <span class="stat-unit">proveedores aprendidos</span>
             </div>
           </div>
         </div>
 
-        <!-- RESUMEN VISUAL DE FACTURAS DE LA SESIÓN RECIENTE -->
-        <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl overflow-hidden shadow-md">
-          <div class="bg-slate-800 px-4 py-3 border-b border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div class="flex items-center space-x-2">
-              <i class="fa-solid fa-folder-tree text-indigo-400 text-sm"></i>
-              <span class="text-sm font-semibold text-slate-200">Facturas y Documentos de la Sesión Reciente</span>
+        <!-- Resumen visual de la sesión reciente -->
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">
+              <i class="fa-solid fa-folder-tree"></i>
+              <span>Facturas y Documentos de la Sesión Reciente</span>
             </div>
-            <span id="sessionCountText" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300">0 procesados</span>
+            <span id="sessionCountText" class="tag no-dot">0 procesados</span>
           </div>
 
-          <!-- Barra de Filtros para Sesión Reciente -->
-          <div class="bg-slate-900/60 px-4 py-2.5 border-b border-slate-700/60 flex flex-wrap items-center gap-3">
-            <div class="relative flex-1 min-w-[200px]">
-              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
-              <input type="text" id="sessionSearchInput" oninput="applySessionFiltersAndRender()" placeholder="Filtrar por proveedor o archivo..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+          <!-- Filtros de la sesión reciente -->
+          <div class="filters">
+            <div class="search">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="sessionSearchInput" oninput="applySessionFiltersAndRender()" placeholder="Filtrar por proveedor o archivo..." class="input input-sm">
             </div>
-            <div class="w-48">
-              <select id="sessionStatusFilter" onchange="applySessionFiltersAndRender()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+            <div style="width: 220px; max-width: 100%;">
+              <select id="sessionStatusFilter" onchange="applySessionFiltersAndRender()" class="select select-sm">
                 <option value="">Todos los estados</option>
-                <option value="SUCCESS">Subidas a Drive ✅</option>
-                <option value="SKIPPED_DUPLICATE">Duplicados omitidos ⏭️</option>
-                <option value="AMBIGUOUS_DATE">Fechas Dudosas ⚠️</option>
-                <option value="REVIEW_MISSING_DATA">Dudosas: falta un dato ⚠️</option>
-                <option value="DISCARDED">Descartadas 🚫</option>
-                <option value="NO_DOCUMENT">Sin documento 📭</option>
+                <option value="SUCCESS">Subidas a Drive</option>
+                <option value="SKIPPED_DUPLICATE">Duplicados omitidos</option>
+                <option value="AMBIGUOUS_DATE">Fechas Dudosas</option>
+                <option value="REVIEW_MISSING_DATA">Dudosas: falta un dato</option>
+                <option value="DISCARDED">Descartadas</option>
+                <option value="NO_DOCUMENT">Sin documento</option>
               </select>
             </div>
-            <button onclick="resetSessionFilters()" class="text-xs text-indigo-400 hover:text-indigo-300 hover:underline">
+            <button onclick="resetSessionFilters()" class="link-btn">
               Limpiar
             </button>
           </div>
 
-          <div id="sessionTableContainer" class="p-0 overflow-x-auto">
+          <div id="sessionTableContainer" class="table-wrap">
             <!-- Cargado dinámicamente con cabeceras ordenables -->
           </div>
         </div>
 
-        <!-- Real-time Activity Terminal -->
-        <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl overflow-hidden shadow-md">
-          <div class="bg-slate-800 px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-              <i class="fa-solid fa-terminal text-slate-400 text-sm"></i>
-              <span class="text-sm font-semibold text-slate-200">Registro de Actividad en Vivo (Terminal)</span>
+        <!-- Registro de actividad en vivo -->
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="terminal-title">
+              <i class="fa-solid fa-terminal"></i>
+              <span class="truncate">Registro de Actividad en Vivo (Terminal)</span>
             </div>
-            <span id="currentStepText" class="text-xs font-medium text-slate-400">Esperando...</span>
+            <span id="currentStepText" class="terminal-step">Esperando...</span>
           </div>
-          <div id="terminalLogs" class="p-4 font-mono text-xs text-slate-300 h-64 overflow-y-auto space-y-1 bg-slate-950/80">
-            <div class="text-slate-500">// Sistema listo. Pulsa 'Ejecutar Ahora' para iniciar el procesamiento.</div>
+          <div id="terminalLogs" class="terminal-body">
+            <div class="log-muted">// Sistema listo. Pulsa 'Ejecutar Ahora' para iniciar el procesamiento.</div>
           </div>
         </div>
       </div>
 
-      <!-- TAB 2: FACTURAS DUDOSAS (AMBIGÜEDAD) -->
-      <div id="tab-ambiguous" class="tab-pane hidden space-y-4">
-        <div class="flex items-center justify-between">
+      <!-- PESTAÑA 2: FACTURAS DUDOSAS -->
+      <div id="tab-ambiguous" class="tab-pane hidden">
+        <div class="page-head">
           <div>
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-              <i class="fa-solid fa-calendar-question text-amber-400"></i>
+            <h2 class="page-title">
+              <span class="title-ico c-warn"><i class="fa-solid fa-calendar-day"></i></span>
               Facturas Dudosas (Resolución de Fechas)
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Detectadas con día y mes ≤ 12 sin regla previa. Selecciona la opción correcta o descártala si no es válida.</p>
+            <p class="page-desc">Detectadas con día y mes ≤ 12 sin regla previa. Selecciona la opción correcta o descártala si no es válida.</p>
           </div>
-          <button onclick="loadAmbiguous()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
-            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+          <button onclick="loadAmbiguous()" class="btn btn-ghost btn-sm">
+            <i class="fa-solid fa-rotate-right"></i> Actualizar
           </button>
         </div>
 
-        <!-- Banner explicativo dinámico -->
-        <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3.5 flex items-start space-x-3 text-xs text-indigo-300">
-          <i class="fa-solid fa-lightbulb text-indigo-400 text-base shrink-0 mt-0.5"></i>
+        <!-- Explicación -->
+        <div class="note note-info">
+          <i class="fa-solid fa-lightbulb"></i>
           <div>
-            <strong class="font-semibold block text-indigo-200">¿Cómo funcionan las opciones A y B?</strong>
+            <span class="note-title">¿Cómo funcionan las opciones A y B?</span>
             Las fechas de Opción A y B <strong>se calculan dinámicamente</strong> a partir de los números que el modelo extrae de cada documento específico (por ejemplo, si una factura tiene 04/11, verás 4 de Noviembre frente a 11 de Abril). Al confirmar, el sistema memoriza el formato de ese proveedor para no volvértelo a preguntar.
           </div>
         </div>
 
-        <div id="ambiguousList" class="space-y-4">
+        <div id="ambiguousList" class="stack" style="gap:16px">
           <!-- Cargado dinámicamente -->
         </div>
       </div>
 
-      <!-- TAB 3: FACTURAS DESCARTADAS -->
-      <div id="tab-discarded" class="tab-pane hidden space-y-4">
-        <div class="flex items-center justify-between">
+      <!-- PESTAÑA 3: DESCARTADAS -->
+      <div id="tab-discarded" class="tab-pane hidden">
+        <div class="page-head">
           <div>
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-              <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+            <h2 class="page-title">
+              <span class="title-ico c-danger"><i class="fa-solid fa-triangle-exclamation"></i></span>
               Bandeja de Facturas Descartadas
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Documentos ignorados (albaranes, confirmaciones de pedido, sin CIF fiscal). Puedes revisarlos, quitarlos de la lista o rescatarlos como facturas válidas.</p>
+            <p class="page-desc">Documentos ignorados (albaranes, confirmaciones de pedido, sin CIF fiscal). Puedes revisarlos, quitarlos de la lista o rescatarlos como facturas válidas.</p>
           </div>
-          <button onclick="loadDiscarded()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
-            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+          <button onclick="loadDiscarded()" class="btn btn-ghost btn-sm">
+            <i class="fa-solid fa-rotate-right"></i> Actualizar
           </button>
         </div>
 
-        <div id="discardedList" class="space-y-4">
+        <div id="discardedList" class="stack" style="gap:16px">
           <!-- Cargado dinámicamente -->
         </div>
       </div>
 
-      <!-- TAB 4: HISTORIAL ÉXITO -->
-      <div id="tab-history" class="tab-pane hidden space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <!-- PESTAÑA 4: HISTORIAL ÉXITO -->
+      <div id="tab-history" class="tab-pane hidden">
+        <div class="page-head">
           <div>
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-              <i class="fa-solid fa-check-circle text-emerald-400"></i>
+            <h2 class="page-title">
+              <span class="title-ico c-ok"><i class="fa-solid fa-circle-check"></i></span>
               Historial de Facturas Procesadas con Éxito
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Facturas validadas y subidas a Google Drive con filtros rápidos y columnas ordenables.</p>
+            <p class="page-desc">Facturas validadas y subidas a Google Drive con filtros rápidos y columnas ordenables.</p>
           </div>
-          <div class="flex items-center space-x-2">
-            <span id="historyCountBadge" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          <div class="page-actions">
+            <span id="historyCountBadge" class="tag tag-ok">
               0 facturas
             </span>
-            <button onclick="loadHistory()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
-              <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+            <button onclick="loadHistory()" class="btn btn-ghost btn-sm">
+              <i class="fa-solid fa-rotate-right"></i> Actualizar
             </button>
           </div>
         </div>
 
-        <!-- Barra de Búsqueda y Filtros de Historial -->
-        <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3.5 space-y-3 shadow-sm">
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <!-- Buscador general -->
-            <div class="sm:col-span-5 relative">
-              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
-              <input type="text" id="historySearchInput" oninput="applyHistoryFiltersAndRender()" placeholder="Buscar por proveedor, archivo, carpeta..." class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+        <div class="card">
+          <!-- Búsqueda y filtros del historial -->
+          <div class="filters">
+            <div class="search" style="flex: 5 1 240px;">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="historySearchInput" oninput="applyHistoryFiltersAndRender()" placeholder="Buscar por proveedor, archivo, carpeta..." class="input input-sm">
             </div>
-
-            <!-- Selector de Proveedor -->
-            <div class="sm:col-span-4">
-              <select id="historySupplierFilter" onchange="applyHistoryFiltersAndRender()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
-                <option value="">🏢 Todos los proveedores</option>
+            <div style="flex: 4 1 200px; min-width: 180px;">
+              <select id="historySupplierFilter" onchange="applyHistoryFiltersAndRender()" class="select select-sm">
+                <option value="">Todos los proveedores</option>
               </select>
             </div>
-
-            <!-- Selector de Mes / Año -->
-            <div class="sm:col-span-3">
-              <select id="historyMonthFilter" onchange="applyHistoryFiltersAndRender()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
-                <option value="">📅 Todos los meses</option>
+            <div style="flex: 3 1 180px; min-width: 170px;">
+              <select id="historyMonthFilter" onchange="applyHistoryFiltersAndRender()" class="select select-sm">
+                <option value="">Todos los meses</option>
               </select>
             </div>
           </div>
-
-          <!-- Sub-barra con contador de resultados y botón de reset -->
-          <div class="flex items-center justify-between pt-1 border-t border-slate-700/50 text-xs text-slate-400">
+          <div class="filters" style="padding-top:9px; padding-bottom:9px; justify-content: space-between; font-size: 12.5px; color: var(--soft);">
             <span id="historyFilterResultText">Cargando facturas...</span>
-            <button onclick="resetHistoryFilters()" class="text-indigo-400 hover:text-indigo-300 text-xs hover:underline flex items-center gap-1">
+            <button onclick="resetHistoryFilters()" class="link-btn">
               <i class="fa-solid fa-filter-circle-xmark"></i> Limpiar filtros
             </button>
           </div>
-        </div>
 
-        <!-- Tabla de Historial con Cabeceras Ordenables -->
-        <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl overflow-hidden shadow-sm">
-          <table class="w-full text-left text-sm text-slate-300">
-            <thead class="bg-slate-800 text-xs uppercase font-semibold text-slate-400 border-b border-slate-700 select-none">
-              <tr>
-                <th onclick="toggleHistorySort('date_str')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
-                  <div class="flex items-center space-x-1.5">
-                    <span>Fecha Emisión</span>
-                    <span id="sortIcon_history_date_str" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
-                  </div>
-                </th>
-                <th onclick="toggleHistorySort('supplier')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
-                  <div class="flex items-center space-x-1.5">
-                    <span>Proveedor</span>
-                    <span id="sortIcon_history_supplier" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
-                  </div>
-                </th>
-                <th onclick="toggleHistorySort('amount')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
-                  <div class="flex items-center space-x-1.5">
-                    <span>Importe</span>
-                    <span id="sortIcon_history_amount" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
-                  </div>
-                </th>
-                <th onclick="toggleHistorySort('filename')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
-                  <div class="flex items-center space-x-1.5">
-                    <span>Archivo</span>
-                    <span id="sortIcon_history_filename" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
-                  </div>
-                </th>
-                <th onclick="toggleHistorySort('drive_folder_path')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
-                  <div class="flex items-center space-x-1.5">
-                    <span>Carpeta en Google Drive</span>
-                    <span id="sortIcon_history_drive_folder_path" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
-                  </div>
-                </th>
-                <th onclick="toggleHistorySort('created_at')" class="px-4 py-3 cursor-pointer hover:bg-slate-700/60 hover:text-white transition group">
-                  <div class="flex items-center space-x-1.5">
-                    <span>Fecha de Subida</span>
-                    <span id="sortIcon_history_created_at" class="text-[11px] text-slate-500 group-hover:text-indigo-300"><i class="fa-solid fa-sort"></i></span>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody id="historyTableBody" class="divide-y divide-slate-700/50">
-              <!-- Cargado dinámicamente -->
-            </tbody>
-          </table>
+          <!-- Tabla del historial con cabeceras ordenables -->
+          <div class="table-wrap">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th onclick="toggleHistorySort('date_str')" class="sortable">
+                    <div class="th-inner">
+                      <span>Fecha Emisión</span>
+                      <span id="sortIcon_history_date_str" class="sort-ico"><i class="fa-solid fa-sort"></i></span>
+                    </div>
+                  </th>
+                  <th onclick="toggleHistorySort('supplier')" class="sortable">
+                    <div class="th-inner">
+                      <span>Proveedor</span>
+                      <span id="sortIcon_history_supplier" class="sort-ico"><i class="fa-solid fa-sort"></i></span>
+                    </div>
+                  </th>
+                  <th onclick="toggleHistorySort('amount')" class="sortable" style="text-align:right">
+                    <div class="th-inner end">
+                      <span>Importe</span>
+                      <span id="sortIcon_history_amount" class="sort-ico"><i class="fa-solid fa-sort"></i></span>
+                    </div>
+                  </th>
+                  <th onclick="toggleHistorySort('filename')" class="sortable">
+                    <div class="th-inner">
+                      <span>Archivo</span>
+                      <span id="sortIcon_history_filename" class="sort-ico"><i class="fa-solid fa-sort"></i></span>
+                    </div>
+                  </th>
+                  <th onclick="toggleHistorySort('drive_folder_path')" class="sortable">
+                    <div class="th-inner">
+                      <span>Carpeta en Google Drive</span>
+                      <span id="sortIcon_history_drive_folder_path" class="sort-ico"><i class="fa-solid fa-sort"></i></span>
+                    </div>
+                  </th>
+                  <th onclick="toggleHistorySort('created_at')" class="sortable">
+                    <div class="th-inner">
+                      <span>Fecha de Subida</span>
+                      <span id="sortIcon_history_created_at" class="sort-ico"><i class="fa-solid fa-sort"></i></span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody">
+                <!-- Cargado dinámicamente -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <!-- TAB 5: REGLAS APRENDIDAS -->
-      <div id="tab-rules" class="tab-pane hidden space-y-4">
-        <div class="flex items-center justify-between">
+      <!-- PESTAÑA 5: REGLAS APRENDIDAS -->
+      <div id="tab-rules" class="tab-pane hidden">
+        <div class="page-head">
           <div>
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-              <i class="fa-solid fa-brain text-purple-400"></i>
+            <h2 class="page-title">
+              <span class="title-ico c-accent"><i class="fa-solid fa-brain"></i></span>
               Reglas Memorizadas (Motor de Aprendizaje Continuo)
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Cada decisión que tomas en 'Dudosas' o 'Descartadas' se guarda aquí con su motivo y su efecto para futuras facturas.</p>
+            <p class="page-desc">Cada decisión que tomas en 'Dudosas' o 'Descartadas' se guarda aquí con su motivo y su efecto para futuras facturas.</p>
           </div>
-          <button onclick="loadRules()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700 transition">
-            <i class="fa-solid fa-rotate-right mr-1"></i> Actualizar
+          <button onclick="loadRules()" class="btn btn-ghost btn-sm">
+            <i class="fa-solid fa-rotate-right"></i> Actualizar
           </button>
         </div>
 
-        <div id="rulesList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div id="rulesList" class="rules-grid">
           <!-- Cargado dinámicamente -->
         </div>
       </div>
 
-      <!-- TAB 6: PROGRAMADOR -->
-      <div id="tab-scheduler" class="tab-pane hidden space-y-6 max-w-3xl">
-        <div>
-          <h2 class="text-xl font-bold text-white flex items-center gap-2">
-            <i class="fa-solid fa-clock text-sky-400"></i>
-            Programador Temporal Desatendido
-          </h2>
-          <p class="text-xs text-slate-400 mt-0.5">Configura la ejecución periódica automática en segundo plano con soporte de recuperación si el PC estaba apagado.</p>
+      <!-- PESTAÑA 6: PROGRAMADOR -->
+      <div id="tab-scheduler" class="tab-pane hidden pane-narrow">
+        <div class="page-head">
+          <div>
+            <h2 class="page-title">
+              <span class="title-ico c-info"><i class="fa-solid fa-clock"></i></span>
+              Programador Temporal Desatendido
+            </h2>
+            <p class="page-desc">Configura la ejecución periódica automática en segundo plano con soporte de recuperación si el PC estaba apagado.</p>
+          </div>
         </div>
 
-        <!-- Tarjeta de Estado de la Programación Activa -->
-        <div id="activeScheduleCard" class="bg-gradient-to-r from-slate-800 to-indigo-950/40 border border-slate-700/80 rounded-xl p-5 shadow-sm space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <i class="fa-solid fa-calendar-check text-indigo-400"></i>
+        <!-- Estado de la programación activa -->
+        <div id="activeScheduleCard" class="sched-card">
+          <div class="review-meta">
+            <span class="eyebrow" style="display:flex; align-items:center; gap:8px; color: var(--ink);">
+              <i class="fa-solid fa-calendar-check c-accent"></i>
               Programación Guardada y Activa
             </span>
-            <span id="activeSchedBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300">Inactiva</span>
+            <span id="activeSchedBadge" class="tag">Inactiva</span>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-            <div class="bg-slate-900/70 border border-slate-700/50 rounded-lg p-3">
-              <span class="text-[11px] text-slate-400 block font-medium">Frecuencia y Horario:</span>
-              <span id="activeSchedFreqText" class="text-sm font-bold text-white mt-0.5 block">Sin programar</span>
+          <div class="sched-grid">
+            <div class="sched-cell">
+              <span class="eyebrow">Frecuencia y Horario:</span>
+              <span id="activeSchedFreqText" class="val">Sin programar</span>
             </div>
-            <div class="bg-slate-900/70 border border-slate-700/50 rounded-lg p-3">
-              <span class="text-[11px] text-slate-400 block font-medium">Última ejecución automática:</span>
-              <span id="activeSchedLastRunText" class="text-sm font-semibold text-slate-200 mt-0.5 block">Ninguna todavía</span>
+            <div class="sched-cell">
+              <span class="eyebrow">Última ejecución automática:</span>
+              <span id="activeSchedLastRunText" class="val" style="font-weight:500">Ninguna todavía</span>
             </div>
           </div>
 
-          <!-- Indicador de Catch-Up -->
-          <div class="text-xs text-sky-300/90 bg-sky-500/10 border border-sky-500/20 rounded-lg p-3 flex items-start gap-2.5">
-            <i class="fa-solid fa-clock-rotate-left text-sky-400 text-sm mt-0.5 shrink-0"></i>
+          <!-- Recuperación (catch-up) -->
+          <div class="note">
+            <i class="fa-solid fa-clock-rotate-left c-info"></i>
             <div>
-              <strong class="font-semibold text-sky-200 block">Recuperación automática de ejecuciones (Catch-Up):</strong>
+              <span class="note-title">Recuperación automática de ejecuciones (Catch-Up):</span>
               Si tu ordenador estaba apagado o suspendido en el momento en que tocaba ejecutarse, en cuanto abras la aplicación el sistema detectará la ejecución pendiente y la lanzará automáticamente.
             </div>
           </div>
         </div>
 
-        <!-- Formulario de Configuración -->
-        <div class="bg-slate-800/70 border border-slate-700/60 p-6 rounded-xl space-y-5">
-          <div class="flex items-center justify-between pb-4 border-b border-slate-700">
+        <!-- Formulario de configuración -->
+        <div class="form-card">
+          <div class="form-row">
             <div>
-              <div class="font-semibold text-slate-100">Activar Programación Automática</div>
-              <div class="text-xs text-slate-400">Ejecutar el gestor periódicamente en segundo plano</div>
+              <div class="form-row-title">Activar Programación Automática</div>
+              <div class="form-row-sub">Ejecutar el gestor periódicamente en segundo plano</div>
             </div>
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="schedEnabled" class="sr-only peer">
-              <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            <label class="switch">
+              <input type="checkbox" id="schedEnabled">
+              <span class="switch-track"><span class="switch-knob"></span></span>
             </label>
           </div>
 
-          <div class="space-y-4">
+          <div class="form-body">
             <div>
-              <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Frecuencia</label>
-              <select id="schedFreq" onchange="toggleFrequencyFields()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+              <label class="field-label upper" for="schedFreq">Frecuencia</label>
+              <select id="schedFreq" onchange="toggleFrequencyFields()" class="select">
                 <option value="weekly">Semanal (elegir día y hora)</option>
                 <option value="monthly">Mensual (primer día de mes u otro)</option>
                 <option value="daily">Diaria</option>
               </select>
             </div>
 
-            <div id="fieldWeekly" class="space-y-2">
-              <label class="block text-xs font-semibold text-slate-300 uppercase">Día de la Semana</label>
-              <select id="schedDayOfWeek" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+            <div id="fieldWeekly">
+              <label class="field-label upper" for="schedDayOfWeek">Día de la Semana</label>
+              <select id="schedDayOfWeek" class="select">
                 <option value="0">Cada Lunes</option>
                 <option value="1">Cada Martes</option>
                 <option value="2">Cada Miércoles</option>
@@ -490,91 +1355,220 @@
               </select>
             </div>
 
-            <div id="fieldMonthly" class="space-y-2 hidden">
-              <label class="block text-xs font-semibold text-slate-300 uppercase">Día del Mes</label>
-              <input type="number" id="schedDayOfMonth" min="1" max="31" value="1" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+            <div id="fieldMonthly" class="hidden">
+              <label class="field-label upper" for="schedDayOfMonth">Día del Mes</label>
+              <input type="number" id="schedDayOfMonth" min="1" max="31" value="1" class="input">
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="form-grid-2">
               <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Hora (0-23)</label>
-                <input type="number" id="schedHour" min="0" max="23" value="9" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                <label class="field-label upper" for="schedHour">Hora (0-23)</label>
+                <input type="number" id="schedHour" min="0" max="23" value="9" class="input">
               </div>
               <div>
-                <label class="block text-xs font-semibold text-slate-300 uppercase mb-2">Minuto (0-59)</label>
-                <input type="number" id="schedMinute" min="0" max="59" value="0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+                <label class="field-label upper" for="schedMinute">Minuto (0-59)</label>
+                <input type="number" id="schedMinute" min="0" max="59" value="0" class="input">
               </div>
             </div>
           </div>
 
-          <div class="pt-4 border-t border-slate-700 flex justify-end">
-            <button onclick="saveSchedule()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2 rounded-lg text-sm transition">
-              <i class="fa-solid fa-floppy-disk mr-1.5"></i> Guardar Programación
+          <div class="form-foot">
+            <button onclick="saveSchedule()" class="btn btn-ink">
+              <i class="fa-solid fa-floppy-disk"></i> Guardar Programación
             </button>
           </div>
         </div>
       </div>
 
+      </div>
     </main>
   </div>
 
   <!-- MODAL ANTI-MISCLICK PARA RESOLVER FECHA DUDOSA -->
-  <div id="modalAntiMisclick" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-      <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl mx-auto">
+  <div id="modalAntiMisclick" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalAntiMisclickTitle">
+    <div class="modal-backdrop" onclick="if (!document.getElementById('btnModalConfirm').disabled) closeModalAntiMisclick()"></div>
+    <div class="modal-panel">
+      <div class="modal-ico warn">
         <i class="fa-solid fa-shield-halved"></i>
       </div>
-      <div class="text-center space-y-2">
-        <h3 class="text-lg font-bold text-white">Confirmar Regla de Fecha</h3>
-        <p class="text-sm text-slate-300" id="modalConfirmationText">
+      <div>
+        <h3 class="modal-title" id="modalAntiMisclickTitle">Confirmar Regla de Fecha</h3>
+        <p class="modal-text" id="modalConfirmationText">
           ¿Estás seguro de que la fecha correcta es...?
         </p>
-        <p class="text-xs text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 mt-2">
-          <i class="fa-solid fa-lightbulb mr-1"></i> Esta regla se memorizará para que todas las futuras facturas de este proveedor se procesen automáticamente sin preguntarte.
-        </p>
+        <div class="note note-warn">
+          <i class="fa-solid fa-lightbulb"></i>
+          <span>Esta regla se memorizará para que todas las futuras facturas de este proveedor se procesen automáticamente sin preguntarte.</span>
+        </div>
       </div>
 
-      <div class="flex items-center space-x-3 pt-2">
-        <button onclick="closeModalAntiMisclick()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2.5 px-4 rounded-xl text-sm transition">
+      <div class="modal-actions">
+        <button onclick="closeModalAntiMisclick()" class="btn btn-ghost btn-lg btn-flex">
           Cancelar
         </button>
-        <button id="btnModalConfirm" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow-lg shadow-emerald-600/30 transition">
-          <i class="fa-solid fa-check mr-1.5"></i> Confirmar y Guardar
+        <button id="btnModalConfirm" class="btn btn-ok btn-lg btn-flex">
+          <i class="fa-solid fa-check"></i> Confirmar y Guardar
         </button>
       </div>
     </div>
   </div>
 
   <!-- MODAL CONFIRMACIÓN PARA DESCARTAR DUDOSA -->
-  <div id="modalConfirmDiscard" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
-      <div class="w-12 h-12 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-2xl mx-auto">
+  <div id="modalConfirmDiscard" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalConfirmDiscardTitle">
+    <div class="modal-backdrop" onclick="if (!document.getElementById('btnModalConfirmDiscard').disabled) closeModalDiscard()"></div>
+    <div class="modal-panel">
+      <div class="modal-ico danger">
         <i class="fa-solid fa-trash-can"></i>
       </div>
-      <div class="text-center space-y-2">
-        <h3 class="text-lg font-bold text-white">Descartar Documento</h3>
-        <p class="text-sm text-slate-300" id="modalDiscardText">
+      <div>
+        <h3 class="modal-title" id="modalConfirmDiscardTitle">Descartar Documento</h3>
+        <p class="modal-text" id="modalDiscardText">
           ¿Estás seguro de que deseas descartar este documento?
         </p>
-        <p class="text-xs text-slate-400 bg-slate-900/60 border border-slate-700 rounded-lg p-2.5 mt-2">
-          El documento no se archivará como factura válida y se moverá a la bandeja de <strong>Descartadas</strong>.
-        </p>
+        <div class="note">
+          <i class="fa-solid fa-circle-info c-soft"></i>
+          <span>El documento no se archivará como factura válida y se moverá a la bandeja de <strong>Descartadas</strong>.</span>
+        </div>
       </div>
 
-      <div class="flex items-center space-x-3 pt-2">
-        <button onclick="closeModalDiscard()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2.5 px-4 rounded-xl text-sm transition">
+      <div class="modal-actions">
+        <button onclick="closeModalDiscard()" class="btn btn-ghost btn-lg btn-flex">
           Cancelar
         </button>
-        <button id="btnModalConfirmDiscard" class="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold py-2.5 px-4 rounded-xl text-sm shadow-lg shadow-rose-600/30 transition">
-          <i class="fa-solid fa-trash-can mr-1.5"></i> Confirmar Descarte
+        <button id="btnModalConfirmDiscard" class="btn btn-lg btn-flex" style="background: var(--danger); color: var(--surface); font-weight: 600;">
+          <i class="fa-solid fa-trash-can"></i> Confirmar Descarte
         </button>
       </div>
     </div>
   </div>
 
-  <!-- JAVASCRIPT APP LOGIC -->
+  <!-- LÓGICA DE LA APLICACIÓN -->
   <script>
     let activeTab = 'dashboard';
+
+    // ── Utilidades de movimiento ────────────────────────────────────────
+    const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+    const SPRING_CSS = getComputedStyle(document.documentElement).getPropertyValue('--spring').trim();
+    // Navegadores antiguos sin linear(): se usa la curva ease-out para no romper nada
+    const SPRING = (SPRING_CSS && window.CSS && CSS.supports('transition-timing-function', SPRING_CSS)) ? SPRING_CSS : EASE_OUT;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    // Una animación nunca debe impedir que se actualicen los datos
+    function safeAnimate(el, frames, opts) {
+      try { if (el && el.animate) el.animate(frames, opts); } catch (e) { /* sin animación */ }
+    }
+
+    // Entrada suave de un elemento: sube 8 px y aparece (solo opacidad si el usuario reduce el movimiento)
+    function animateIn(el, { y = 8, delay = 0, duration = 380, blur = false } = {}) {
+      if (!el || !el.animate) return;
+      const reduce = reducedMotion.matches;
+      const from = reduce ? { opacity: 0 } : { opacity: 0, transform: `translateY(${y}px)`, filter: blur ? 'blur(2px)' : 'none' };
+      const to = reduce ? { opacity: 1 } : { opacity: 1, transform: 'none', filter: 'none' };
+      safeAnimate(el, [from, to], { duration: reduce ? 180 : duration, delay: reduce ? 0 : delay, easing: reduce ? 'ease' : EASE_OUT, fill: 'backwards' });
+    }
+
+    // Entrada escalonada (40 ms entre elementos) de los primeros elementos de una lista
+    function staggerIn(container, { max = 8, step = 45, y = 10, blur = false } = {}) {
+      if (!container) return;
+      Array.from(container.children).slice(0, max).forEach((el, i) => animateIn(el, { delay: i * step, y, blur }));
+    }
+
+    // Cambio de cifra: la nueva entra desde abajo con un muelle casi sin rebote
+    function setStat(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const next = String(value ?? 0);
+      if (el.textContent === next) return;
+      const first = el.dataset.ready !== '1';
+      el.textContent = next;
+      el.dataset.ready = '1';
+      if (first || !el.animate) return;
+      const reduce = reducedMotion.matches;
+      safeAnimate(el,
+        reduce ? [{ opacity: 0.2 }, { opacity: 1 }]
+               : [{ opacity: 0, transform: 'translateY(35%)', filter: 'blur(3px)' }, { opacity: 1, transform: 'none', filter: 'none' }],
+        { duration: reduce ? 200 : 560, easing: reduce ? 'ease' : SPRING }
+      );
+    }
+
+    // Indicador deslizante del menú lateral
+    function moveNavIndicator(btn, instant) {
+      const ind = document.getElementById('navIndicator');
+      if (!ind || !btn) return;
+      if (instant) ind.style.transition = 'none';
+      ind.style.height = btn.offsetHeight + 'px';
+      ind.style.transform = `translateY(${btn.offsetTop}px)`;
+      ind.style.opacity = '1';
+      if (instant) {
+        ind.getBoundingClientRect();
+        ind.style.transition = '';
+      }
+    }
+    window.addEventListener('load', () => moveNavIndicator(document.getElementById(`nav-${activeTab}`), true));
+    window.addEventListener('resize', () => moveNavIndicator(document.getElementById(`nav-${activeTab}`), true));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => moveNavIndicator(document.getElementById(`nav-${activeTab}`), true));
+    }
+
+    // Ventanas modales: aparecen con muelle, se van rápido
+    const modalTimers = {};
+    function openModal(id) {
+      const m = document.getElementById(id);
+      if (!m) return;
+      clearTimeout(modalTimers[id]);
+      m.classList.remove('hidden');
+      m.getBoundingClientRect();
+      requestAnimationFrame(() => m.classList.add('is-open'));
+    }
+    function closeModal(id) {
+      const m = document.getElementById(id);
+      if (!m || m.classList.contains('hidden')) return;
+      m.classList.remove('is-open');
+      clearTimeout(modalTimers[id]);
+      modalTimers[id] = setTimeout(() => m.classList.add('hidden'), 200);
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (document.getElementById('btnModalConfirm').disabled || document.getElementById('btnModalConfirmDiscard').disabled) return;
+      closeModalAntiMisclick();
+      closeModalDiscard();
+    });
+
+    // ── Modo claro / oscuro ─────────────────────────────────────────────
+    function currentTheme() {
+      return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    }
+
+    function updateThemeButton() {
+      const btn = document.getElementById('themeToggle');
+      if (!btn) return;
+      const label = currentTheme() === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      updateThemeButton();
+    }
+
+    function toggleTheme() {
+      const next = currentTheme() === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('panelTheme', next); } catch (e) {}
+      if (document.startViewTransition && !reducedMotion.matches) {
+        document.startViewTransition(() => applyTheme(next));
+      } else {
+        applyTheme(next);
+      }
+    }
+
+    // Si el usuario nunca eligió, el panel sigue el modo de Windows
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      let saved = null;
+      try { saved = localStorage.getItem('panelTheme'); } catch (err) {}
+      if (!saved) applyTheme(e.matches ? 'dark' : 'light');
+    });
+    updateThemeButton();
 
     // Iniciar polling de estado cada 2 segundos
     setInterval(pollStatus, 2000);
@@ -594,18 +1588,23 @@
     }
 
     function switchTab(tabId) {
+      const changed = activeTab !== tabId;
       activeTab = tabId;
       document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
-      document.querySelectorAll('.nav-item').forEach(el => {
-        el.className = 'nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700/50 hover:text-white transition';
-      });
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('is-active'));
 
       const pane = document.getElementById(`tab-${tabId}`);
-      if (pane) pane.classList.remove('hidden');
+      if (pane) {
+        pane.classList.remove('hidden');
+        if (changed) {
+          animateIn(pane, { y: 6, duration: 340 });
+        }
+      }
 
       const navBtn = document.getElementById(`nav-${tabId}`);
       if (navBtn) {
-        navBtn.className = 'nav-item w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium text-white bg-indigo-600/20 border border-indigo-500/30';
+        navBtn.classList.add('is-active');
+        moveNavIndicator(navBtn, false);
       }
 
       if (tabId === 'ambiguous') loadAmbiguous();
@@ -615,12 +1614,52 @@
       if (tabId === 'scheduler') loadSchedule();
     }
 
+    let lastLogs = [];
+
+    function logClass(l) {
+      let cls = '';
+      if (l.includes('[ERROR]')) cls = 'log-error';
+      if (l.includes('[WARN]')) cls = 'log-warn';
+      if (l.includes('[SUCCESS]')) cls = 'log-success';
+      if (l.includes('[DRIVE]')) cls = 'log-drive';
+      if (l.includes('[AMBIGÜEDAD]') || l.includes('[DUDOSA]')) cls = 'log-dudosa';
+      if (l.includes('[DESCARTADA]')) cls = 'log-discard';
+      if (l.includes('[SCHEDULER]')) cls = 'log-sched';
+      return cls;
+    }
+
+    function renderLogs(logs) {
+      const term = document.getElementById('terminalLogs');
+      const isScrolledToBottom = term.scrollHeight - term.clientHeight <= term.scrollTop + 40;
+      const same = logs.length === lastLogs.length && logs.every((l, i) => l === lastLogs[i]);
+      if (same) return;
+
+      const isAppend = lastLogs.length > 0 && logs.length > lastLogs.length && lastLogs.every((l, i) => l === logs[i]);
+      if (isAppend) {
+        const frag = document.createDocumentFragment();
+        logs.slice(lastLogs.length).forEach(l => {
+          const div = document.createElement('div');
+          div.className = (logClass(l) + ' log-new').trim();
+          div.textContent = l;
+          frag.appendChild(div);
+        });
+        term.appendChild(frag);
+      } else {
+        term.innerHTML = logs.map(l => `<div class="${logClass(l)}">${escapeHtml(l)}</div>`).join('');
+      }
+      lastLogs = logs.slice();
+
+      if (isScrolledToBottom) {
+        term.scrollTop = term.scrollHeight;
+      }
+    }
+
     async function pollStatus() {
       try {
         const res = await fetch('/api/status');
         const data = await res.json();
 
-        // Actualizar Badge de Estado
+        // Actualizar indicador de estado
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const btnRun = document.getElementById('btnRunNow');
@@ -628,37 +1667,38 @@
         const btnRunText = document.getElementById('btnRunText');
 
         if (data.status === 'running') {
-          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping';
+          statusDot.dataset.state = 'run';
           statusText.textContent = 'En ejecución...';
           btnRun.disabled = true;
-          btnRunIcon.className = 'fa-solid fa-spinner fa-spin text-sm';
+          btnRunIcon.className = 'fa-solid fa-spinner fa-spin';
           btnRunText.textContent = 'Procesando...';
         } else if (data.status === 'error') {
-          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+          statusDot.dataset.state = 'error';
           statusText.textContent = 'Error detectado';
           btnRun.disabled = false;
-          btnRunIcon.className = 'fa-solid fa-play text-sm';
+          btnRunIcon.className = 'fa-solid fa-play';
           btnRunText.textContent = 'Reintentar';
         } else if (data.stats && data.stats.requires_review > 0) {
-          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+          statusDot.dataset.state = 'warn';
           statusText.textContent = `${data.stats.requires_review} por revisar`;
           btnRun.disabled = false;
-          btnRunIcon.className = 'fa-solid fa-play text-sm';
+          btnRunIcon.className = 'fa-solid fa-play';
           btnRunText.textContent = 'Ejecutar Ahora';
         } else {
-          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+          statusDot.dataset.state = 'ok';
           statusText.textContent = 'Listo';
           btnRun.disabled = false;
-          btnRunIcon.className = 'fa-solid fa-play text-sm';
+          btnRunIcon.className = 'fa-solid fa-play';
           btnRunText.textContent = 'Ejecutar Ahora';
         }
 
         // Estadísticas
         if (data.stats) {
-          document.getElementById('statSuccess').textContent = data.stats.success_count;
-          document.getElementById('statAmbiguous').textContent = data.stats.ambiguous_count;
-          document.getElementById('statDiscarded').textContent = data.stats.discarded_count;
-          document.getElementById('statRules').textContent = data.stats.rules_count;
+          setStat('statSuccess', data.stats.success_count);
+          setStat('statAmbiguous', data.stats.ambiguous_count);
+          setStat('statDiscarded', data.stats.discarded_count);
+          setStat('statRules', data.stats.rules_count);
+          document.getElementById('statCardAmbiguous').classList.toggle('is-focal', data.stats.ambiguous_count > 0);
 
           updateBadge('badgeAmbiguous', data.stats.ambiguous_count);
           updateBadge('badgeDiscarded', data.stats.discarded_count);
@@ -669,26 +1709,12 @@
         // Resumen de la sesión en el Panel de Control
         renderSessionSummary(data.session_summary || []);
 
-        // Paso actual y logs
-        document.getElementById('currentStepText').textContent = data.current_step || 'Inactivo';
+        // Paso actual y registro
+        const stepEl = document.getElementById('currentStepText');
+        stepEl.textContent = data.current_step || 'Inactivo';
+        stepEl.title = stepEl.textContent;
         if (data.logs && data.logs.length > 0) {
-          const term = document.getElementById('terminalLogs');
-          const isScrolledToBottom = term.scrollHeight - term.clientHeight <= term.scrollTop + 40;
-          term.innerHTML = data.logs.map(l => {
-            let color = 'text-slate-300';
-            if (l.includes('[ERROR]')) color = 'text-rose-400 font-bold';
-            if (l.includes('[WARN]')) color = 'text-amber-300';
-            if (l.includes('[SUCCESS]')) color = 'text-emerald-400 font-bold';
-            if (l.includes('[DRIVE]')) color = 'text-sky-300 font-semibold';
-            if (l.includes('[AMBIGÜEDAD]') || l.includes('[DUDOSA]')) color = 'text-amber-400 font-semibold';
-            if (l.includes('[DESCARTADA]')) color = 'text-rose-300';
-            if (l.includes('[SCHEDULER]')) color = 'text-sky-400 font-semibold';
-            return `<div class="${color}">${escapeHtml(l)}</div>`;
-          }).join('');
-
-          if (isScrolledToBottom) {
-            term.scrollTop = term.scrollHeight;
-          }
+          renderLogs(data.logs);
         }
       } catch (e) {
         console.error('Error en pollStatus:', e);
@@ -698,12 +1724,21 @@
     let sessionRawItems = [];
     let sessionSortCol = 'supplier';
     let sessionSortAsc = true;
+    let lastSessionHtml = '';
+    let seenSessionKeys = null;
 
     function fmtAmount(v) {
-      if (v === null || v === undefined || v === '' || v === 'null') return '<span class="text-slate-500">—</span>';
+      if (v === null || v === undefined || v === '' || v === 'null') return '<span class="muted-dash">—</span>';
       const n = parseFloat(v);
       if (isNaN(n)) return escapeHtml(String(v));
       return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    }
+
+    function setSessionHtml(container, html) {
+      if (html === lastSessionHtml) return false;
+      lastSessionHtml = html;
+      container.innerHTML = html;
+      return true;
     }
 
     function renderSessionSummary(items) {
@@ -713,13 +1748,13 @@
         const countBadge = document.getElementById('sessionCountText');
         if (countBadge) countBadge.textContent = '0 procesados';
         if (container) {
-          container.innerHTML = `
-            <div class="text-center py-6 text-slate-400 space-y-2">
-              <i class="fa-solid fa-circle-info text-2xl text-slate-500"></i>
-              <p class="text-sm">Pulsa <strong>"Ejecutar Ahora"</strong> para procesar los correos de tu bandeja.</p>
-              <p class="text-xs text-slate-500">Aquí verás exactamente qué facturas se han subido, de qué proveedor, y en qué carpeta de Google Drive (Año / Mes / Proveedor) han quedado archivadas.</p>
+          setSessionHtml(container, `
+            <div class="empty">
+              <div class="empty-ico c-soft"><i class="fa-solid fa-circle-info"></i></div>
+              <p style="color: var(--ink); font-size: 14px;">Pulsa <strong>"Ejecutar Ahora"</strong> para procesar los correos de tu bandeja.</p>
+              <p>Aquí verás exactamente qué facturas se han subido, de qué proveedor, y en qué carpeta de Google Drive (Año / Mes / Proveedor) han quedado archivadas.</p>
             </div>
-          `;
+          `);
         }
         return;
       }
@@ -743,6 +1778,10 @@
       if (sInput) sInput.value = '';
       if (stFilter) stFilter.value = '';
       applySessionFiltersAndRender();
+    }
+
+    function sessionKey(item) {
+      return `${item.id || ''}|${item.filename || ''}|${item.supplier || ''}|${item.status || ''}`;
     }
 
     function applySessionFiltersAndRender() {
@@ -781,98 +1820,120 @@
       }
 
       if (filtered.length === 0) {
-        container.innerHTML = `
-          <div class="p-6 text-center text-xs text-slate-400">
-            No hay documentos en esta sesión que coincidan con los filtros.
+        setSessionHtml(container, `
+          <div class="empty" style="padding: 28px 24px;">
+            <p>No hay documentos en esta sesión que coincidan con los filtros.</p>
           </div>
-        `;
+        `);
         return;
       }
 
       const getIcon = (col) => {
-        if (sessionSortCol !== col) return '<i class="fa-solid fa-sort text-slate-600"></i>';
-        return sessionSortAsc ? '<i class="fa-solid fa-arrow-down-a-z text-indigo-400"></i>' : '<i class="fa-solid fa-arrow-up-z-a text-indigo-400"></i>';
+        if (sessionSortCol !== col) return '<span class="sort-ico"><i class="fa-solid fa-sort"></i></span>';
+        return sessionSortAsc ? '<span class="sort-ico is-on"><i class="fa-solid fa-arrow-down-a-z"></i></span>' : '<span class="sort-ico is-on"><i class="fa-solid fa-arrow-up-z-a"></i></span>';
       };
 
-      container.innerHTML = `
-        <table class="w-full text-left text-xs text-slate-300">
-          <thead class="bg-slate-800 text-[11px] uppercase font-semibold text-slate-400 border-b border-slate-700 select-none">
+      const html = `
+        <table class="tbl">
+          <thead>
             <tr>
-              <th onclick="toggleSessionSort('filename')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
-                <div class="flex items-center space-x-1.5"><span>Documento / Asunto</span> <span>${getIcon('filename')}</span></div>
+              <th onclick="toggleSessionSort('filename')" class="sortable">
+                <div class="th-inner"><span>Documento / Asunto</span> ${getIcon('filename')}</div>
               </th>
-              <th onclick="toggleSessionSort('supplier')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
-                <div class="flex items-center space-x-1.5"><span>Proveedor</span> <span>${getIcon('supplier')}</span></div>
+              <th onclick="toggleSessionSort('supplier')" class="sortable">
+                <div class="th-inner"><span>Proveedor</span> ${getIcon('supplier')}</div>
               </th>
-              <th onclick="toggleSessionSort('amount')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
-                <div class="flex items-center justify-end space-x-1.5"><span>Importe</span> <span>${getIcon('amount')}</span></div>
+              <th onclick="toggleSessionSort('amount')" class="sortable" style="text-align:right">
+                <div class="th-inner end"><span>Importe</span> ${getIcon('amount')}</div>
               </th>
-              <th onclick="toggleSessionSort('drive_folder_path')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
-                <div class="flex items-center space-x-1.5"><span>Destino en Google Drive</span> <span>${getIcon('drive_folder_path')}</span></div>
+              <th onclick="toggleSessionSort('drive_folder_path')" class="sortable">
+                <div class="th-inner"><span>Destino en Google Drive</span> ${getIcon('drive_folder_path')}</div>
               </th>
-              <th onclick="toggleSessionSort('status')" class="px-4 py-2.5 cursor-pointer hover:bg-slate-700/60 hover:text-white transition">
-                <div class="flex items-center space-x-1.5"><span>Estado</span> <span>${getIcon('status')}</span></div>
+              <th onclick="toggleSessionSort('status')" class="sortable">
+                <div class="th-inner"><span>Estado</span> ${getIcon('status')}</div>
               </th>
-              <th class="px-4 py-2.5 text-right">Acción</th>
+              <th class="td-end">Acción</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-700/50">
+          <tbody>
             ${filtered.map(item => {
               let statusBadge = '';
               let destText = '';
               let actionBtn = '';
 
               if (item.status === 'SUCCESS') {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold whitespace-nowrap">Subida a Drive ✅</span>';
-                destText = `<span class="font-mono text-emerald-400 font-medium"><i class="fa-regular fa-folder mr-1"></i> ${escapeHtml(item.drive_folder_path || '-')}</span>`;
-                actionBtn = '<span class="text-slate-400">Archivada</span>';
+                statusBadge = '<span class="tag tag-ok">Subida a Drive</span>';
+                destText = `<span class="path c-ok"><i class="fa-regular fa-folder"></i> ${escapeHtml(item.drive_folder_path || '-')}</span>`;
+                actionBtn = '<span class="action-note">Archivada</span>';
               } else if (item.status === 'SKIPPED_DUPLICATE') {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold whitespace-nowrap">Ya estaba en Drive ⏭️</span>';
-                destText = `<span class="font-mono text-sky-400/90"><i class="fa-regular fa-folder mr-1"></i> ${escapeHtml(item.drive_folder_path || '-')} (ya existía, no se ha vuelto a subir)</span>`;
-                actionBtn = '<span class="text-slate-400">Omitida (duplicado)</span>';
+                statusBadge = '<span class="tag tag-info">Ya estaba en Drive</span>';
+                destText = `<span class="path c-info"><i class="fa-regular fa-folder"></i> ${escapeHtml(item.drive_folder_path || '-')}</span><div class="path-note">(ya existía, no se ha vuelto a subir)</div>`;
+                actionBtn = '<span class="action-note">Omitida (duplicado)</span>';
               } else if (item.status === 'AMBIGUOUS_DATE') {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold whitespace-nowrap">Fecha Dudosa ⚠️</span>';
-                destText = `<span class="font-mono text-amber-400/90">${escapeHtml(item.drive_folder_path || item.date_str)} (Provisional)</span>`;
-                actionBtn = `<button onclick="switchTab('ambiguous')" class="text-indigo-400 hover:underline">Resolver fecha &rarr;</button>`;
+                statusBadge = '<span class="tag tag-warn">Fecha Dudosa</span>';
+                destText = `<span class="path c-warn">${escapeHtml(item.drive_folder_path || item.date_str)}</span><div class="path-note">(Provisional)</div>`;
+                actionBtn = `<button onclick="switchTab('ambiguous')" class="link-btn">Resolver fecha &rarr;</button>`;
               } else if (item.status === 'REVIEW_MISSING_DATA') {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold whitespace-nowrap">Dudosa ⚠️</span>';
-                destText = `<span class="text-amber-400/90 italic">${escapeHtml(item.reason || 'Falta un dato en el documento')}</span>`;
-                actionBtn = `<button onclick="switchTab('ambiguous')" class="text-indigo-400 hover:underline">Revisar &rarr;</button>`;
+                statusBadge = '<span class="tag tag-warn">Dudosa</span>';
+                destText = `<span class="reason reason-warn">${escapeHtml(item.reason || 'Falta un dato en el documento')}</span>`;
+                actionBtn = `<button onclick="switchTab('ambiguous')" class="link-btn">Revisar &rarr;</button>`;
               } else if (item.status === 'NO_DOCUMENT') {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-300 border border-slate-500/30 font-semibold whitespace-nowrap">Sin documento 📭</span>';
-                destText = `<span class="text-slate-400 italic">${escapeHtml(item.reason || 'El correo no trae ningún PDF ni imagen útil')}</span>`;
-                actionBtn = '<span class="text-slate-400">Revisar en Gmail</span>';
+                statusBadge = '<span class="tag">Sin documento</span>';
+                destText = `<span class="reason">${escapeHtml(item.reason || 'El correo no trae ningún PDF ni imagen útil')}</span>`;
+                actionBtn = '<span class="action-note">Revisar en Gmail</span>';
               } else {
-                statusBadge = '<span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold whitespace-nowrap">Descartada 🚫</span>';
-                destText = `<span class="text-slate-400 italic">${escapeHtml(item.reason || 'No es factura legal con CIF')}</span>`;
-                actionBtn = `<button onclick="switchTab('discarded')" class="text-indigo-400 hover:underline">Revisar/Rescatar &rarr;</button>`;
+                statusBadge = '<span class="tag tag-danger">Descartada</span>';
+                destText = `<span class="reason">${escapeHtml(item.reason || 'No es factura legal con CIF')}</span>`;
+                actionBtn = `<button onclick="switchTab('discarded')" class="link-btn">Revisar/Rescatar &rarr;</button>`;
               }
 
               return `
-                <tr class="hover:bg-slate-800/40 transition">
-                  <td class="px-4 py-2.5 font-medium text-white max-w-xs truncate" title="${escapeHtml(item.filename)}">
-                    ${escapeHtml(item.filename)}
-                    ${item.email_subject ? `<div class="text-[10px] text-slate-500 truncate">${escapeHtml(item.email_subject)}</div>` : ''}
+                <tr data-key="${escapeHtml(sessionKey(item))}">
+                  <td class="td-file" title="${escapeHtml(item.filename)}">
+                    <div class="file-name truncate">${escapeHtml(item.filename)}</div>
+                    ${item.email_subject ? `<div class="file-sub truncate">${escapeHtml(item.email_subject)}</div>` : ''}
                   </td>
-                  <td class="px-4 py-2.5 font-semibold text-slate-200">${escapeHtml(item.supplier)}</td>
-                  <td class="px-4 py-2.5 text-right font-semibold text-amber-300 whitespace-nowrap">${fmtAmount(item.amount)}</td>
-                  <td class="px-4 py-2.5">${destText}</td>
-                  <td class="px-4 py-2.5">${statusBadge}</td>
-                  <td class="px-4 py-2.5 text-right font-medium">${actionBtn}</td>
+                  <td class="td-strong">${escapeHtml(item.supplier)}</td>
+                  <td class="td-amount">${fmtAmount(item.amount)}</td>
+                  <td>${destText}</td>
+                  <td>${statusBadge}</td>
+                  <td class="td-end">${actionBtn}</td>
                 </tr>
               `;
             }).join('')}
           </tbody>
         </table>
       `;
+
+      if (setSessionHtml(container, html)) {
+        // Solo las filas que no estaban antes entran con animación
+        const rows = container.querySelectorAll('tbody tr');
+        const keys = new Set();
+        let delay = 0;
+        rows.forEach(tr => {
+          const k = tr.dataset.key;
+          keys.add(k);
+          if (seenSessionKeys && !seenSessionKeys.has(k) && delay < 400) {
+            tr.classList.add('row-new');
+            tr.style.animationDelay = `${delay}ms`;
+            delay += 40;
+          }
+        });
+        seenSessionKeys = seenSessionKeys ? new Set([...seenSessionKeys, ...keys]) : keys;
+      }
     }
 
     function updateBadge(id, count) {
       const el = document.getElementById(id);
       if (!el) return;
       if (count > 0) {
+        const wasHidden = el.classList.contains('hidden');
+        const changed = el.textContent !== String(count);
         el.textContent = count;
         el.classList.remove('hidden');
+        if ((wasHidden || changed) && el.animate && !reducedMotion.matches) {
+          safeAnimate(el, [{ transform: 'scale(0.6)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 520, easing: SPRING });
+        }
       } else {
         el.classList.add('hidden');
       }
@@ -892,10 +1953,23 @@
       }
     }
 
+    // Visor del documento (común a Dudosas y Descartadas)
+    function viewerHtml(item) {
+      return `
+        <div class="viewer">
+          <div class="viewer-bar">
+            <span class="truncate">${escapeHtml(item.filename)}</span>
+            <a href="/api/preview/${item.id}" target="_blank">Abrir pestaña <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+          </div>
+          <iframe src="/api/preview/${item.id}#toolbar=0"></iframe>
+        </div>
+      `;
+    }
+
     // ── Carga de Facturas Dudosas ───────────────────────────────────────────
     async function loadAmbiguous() {
       const container = document.getElementById('ambiguousList');
-      container.innerHTML = '<div class="text-slate-400 text-sm py-4">Cargando facturas dudosas...</div>';
+      container.innerHTML = '<div class="loading">Cargando facturas dudosas...</div>';
 
       try {
         const res = await fetch('/api/ambiguous');
@@ -903,14 +1977,13 @@
 
         if (items.length === 0) {
           container.innerHTML = `
-            <div class="bg-slate-800/40 border border-slate-700/40 rounded-xl p-8 text-center space-y-2">
-              <div class="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl mx-auto">
-                <i class="fa-solid fa-circle-check"></i>
-              </div>
-              <h3 class="text-base font-semibold text-white">¡No hay facturas dudosas pendientes!</h3>
-              <p class="text-xs text-slate-400">Todas las fechas han sido validadas o resueltas automáticamente por las reglas aprendidas.</p>
+            <div class="empty empty-card">
+              <div class="empty-ico c-ok"><i class="fa-solid fa-circle-check"></i></div>
+              <h3>¡No hay facturas dudosas pendientes!</h3>
+              <p>Todas las fechas han sido validadas o resueltas automáticamente por las reglas aprendidas.</p>
             </div>
           `;
+          animateIn(container.firstElementChild);
           return;
         }
 
@@ -922,65 +1995,58 @@
           const opt2 = opts[1] || null;
 
           return `
-            <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 shadow-md">
-              <!-- Visor de Documento con fallback limpio -->
-              <div class="h-96 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 flex flex-col">
-                <div class="bg-slate-800 px-3 py-1.5 border-b border-slate-700 text-xs font-semibold text-slate-300 flex items-center justify-between">
-                  <span class="truncate">${escapeHtml(item.filename)}</span>
-                  <a href="/api/preview/${item.id}" target="_blank" class="text-indigo-400 hover:underline">Abrir pestaña <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>
-                </div>
-                <iframe src="/api/preview/${item.id}#toolbar=0" class="w-full flex-1 border-0"></iframe>
-              </div>
+            <div class="review">
+              ${viewerHtml(item)}
 
-              <!-- Selector de Opciones Anti-Misclick -->
-              <div class="flex flex-col justify-between space-y-4">
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <i class="fa-solid fa-triangle-exclamation"></i> Comprueba la fecha
-                    </span>
-                    <span class="text-xs text-slate-400">${item.created_at ? item.created_at.replace('T', ' ') : ''}</span>
+              <!-- Selector de opciones anti-misclick -->
+              <div class="review-side">
+                <div class="review-top">
+                  <div class="review-meta">
+                    <span class="tag tag-warn">Comprueba la fecha</span>
+                    <span class="t-time">${item.created_at ? item.created_at.replace('T', ' ') : ''}</span>
                   </div>
 
-                  <h3 class="text-lg font-bold text-white">${escapeHtml(item.supplier)}</h3>
-                  <p class="text-xs text-slate-300">
+                  <h3 class="review-supplier">${escapeHtml(item.supplier)}</h3>
+                  <p class="review-text">
                     El programa no está seguro de la fecha de este documento. ¿Cuál es la fecha de emisión real?
                   </p>
 
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div class="options">
                     ${opt1 ? `
-                      <button onclick="promptConfirmDate('${item.id}', ${jsArg(item.supplier)}, ${opt1.day}, ${opt1.month}, ${opt1.year}, '${opt1.format}', '${opt1.label}')" class="bg-slate-700/80 hover:bg-indigo-600 text-left p-3.5 rounded-xl border border-slate-600 hover:border-indigo-500 transition group shadow-sm">
-                        <div class="text-[11px] text-slate-400 group-hover:text-indigo-200 uppercase font-semibold">Opción A (${opt1.format})</div>
-                        <div class="text-sm font-bold text-white mt-1">Es ${opt1.label}</div>
+                      <button onclick="promptConfirmDate('${item.id}', ${jsArg(item.supplier)}, ${opt1.day}, ${opt1.month}, ${opt1.year}, '${opt1.format}', '${opt1.label}')" class="option">
+                        <div class="option-label">Opción A (${opt1.format})</div>
+                        <div class="option-value">Es ${opt1.label}</div>
+                        <i class="fa-solid fa-arrow-right option-arrow"></i>
                       </button>
                     ` : ''}
 
                     ${opt2 ? `
-                      <button onclick="promptConfirmDate('${item.id}', ${jsArg(item.supplier)}, ${opt2.day}, ${opt2.month}, ${opt2.year}, '${opt2.format}', '${opt2.label}')" class="bg-slate-700/80 hover:bg-indigo-600 text-left p-3.5 rounded-xl border border-slate-600 hover:border-indigo-500 transition group shadow-sm">
-                        <div class="text-[11px] text-slate-400 group-hover:text-indigo-200 uppercase font-semibold">Opción B (${opt2.format})</div>
-                        <div class="text-sm font-bold text-white mt-1">Es ${opt2.label}</div>
+                      <button onclick="promptConfirmDate('${item.id}', ${jsArg(item.supplier)}, ${opt2.day}, ${opt2.month}, ${opt2.year}, '${opt2.format}', '${opt2.label}')" class="option">
+                        <div class="option-label">Opción B (${opt2.format})</div>
+                        <div class="option-value">Es ${opt2.label}</div>
+                        <i class="fa-solid fa-arrow-right option-arrow"></i>
                       </button>
                     ` : ''}
                   </div>
 
                   <!-- Selector manual de respaldo -->
-                  <div class="pt-3 border-t border-slate-700/60">
-                    <label class="block text-xs font-semibold text-slate-400 mb-1.5">Si ninguna es correcta, elige la fecha exacta en el calendario:</label>
-                    <div class="flex items-center space-x-2">
-                      <input type="date" id="manualDate_${item.id}" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 flex-1">
-                      <button onclick="submitManualDate('${item.id}', ${jsArg(item.supplier)})" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg transition">
+                  <div class="divider">
+                    <label class="field-label" for="manualDate_${item.id}">Si ninguna es correcta, elige la fecha exacta en el calendario:</label>
+                    <div class="inline-row">
+                      <input type="date" id="manualDate_${item.id}" class="input">
+                      <button onclick="submitManualDate('${item.id}', ${jsArg(item.supplier)})" class="btn btn-ghost">
                         Confirmar Manual
                       </button>
                     </div>
                   </div>
                 </div>
 
-                <!-- Barra inferior con Carpeta y Botón de Descarte -->
-                <div class="pt-3 border-t border-slate-700/60 flex items-center justify-between gap-3">
-                  <div class="text-[11px] text-slate-400 truncate">
-                    Carpeta provisional: <span class="font-mono text-slate-200">${item.drive_folder_path || item.date_str}</span>
+                <!-- Carpeta y botón de descarte -->
+                <div class="review-foot">
+                  <div class="folder truncate">
+                    Carpeta provisional: <span>${escapeHtml(item.drive_folder_path || item.date_str)}</span>
                   </div>
-                  <button onclick="promptDiscardAmbiguous('${item.id}', ${jsArg(item.supplier)})" class="bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 py-1.5 px-3 rounded-lg text-xs font-semibold transition shrink-0 flex items-center gap-1.5">
+                  <button onclick="promptDiscardAmbiguous('${item.id}', ${jsArg(item.supplier)})" class="btn btn-danger btn-sm">
                     <i class="fa-solid fa-trash-can"></i> Descartar
                   </button>
                 </div>
@@ -988,9 +2054,10 @@
             </div>
           `;
         }).join('');
+        staggerIn(container, { max: 4, step: 60 });
 
       } catch (e) {
-        container.innerHTML = '<div class="text-rose-400 text-sm">Error cargando facturas dudosas.</div>';
+        container.innerHTML = '<div class="error-text">Error cargando facturas dudosas.</div>';
       }
     }
 
@@ -999,45 +2066,37 @@
       const suggested = (item.detected_dates && item.detected_dates[0] && item.detected_dates[0].iso) || '';
       const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(suggested) ? suggested : '';
       return `
-        <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 shadow-md">
-          <div class="h-96 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 flex flex-col">
-            <div class="bg-slate-800 px-3 py-1.5 border-b border-slate-700 text-xs font-semibold text-slate-300 flex items-center justify-between">
-              <span class="truncate">${escapeHtml(item.filename)}</span>
-              <a href="/api/preview/${item.id}" target="_blank" class="text-indigo-400 hover:underline">Abrir pestaña <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>
-            </div>
-            <iframe src="/api/preview/${item.id}#toolbar=0" class="w-full flex-1 border-0"></iframe>
-          </div>
-          <div class="flex flex-col justify-between space-y-4">
-            <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <i class="fa-solid fa-triangle-exclamation"></i> Falta un dato
-                </span>
-                <span class="text-xs text-slate-400">${item.created_at ? item.created_at.replace('T', ' ') : ''}</span>
+        <div class="review">
+          ${viewerHtml(item)}
+          <div class="review-side">
+            <div class="review-top">
+              <div class="review-meta">
+                <span class="tag tag-warn">Falta un dato</span>
+                <span class="t-time">${item.created_at ? item.created_at.replace('T', ' ') : ''}</span>
               </div>
-              <h3 class="text-lg font-bold text-white">${escapeHtml(item.supplier)}</h3>
-              <p class="text-xs text-slate-300">${escapeHtml(item.reason)} Todavía no está en Drive.</p>
-              <div class="text-xs text-slate-400 space-y-1">
+              <h3 class="review-supplier">${escapeHtml(item.supplier)}</h3>
+              <p class="review-text">${escapeHtml(item.reason)} Todavía no está en Drive.</p>
+              <div class="kv">
                 <div><strong>Remitente:</strong> ${escapeHtml(item.sender || 'Desconocido')}</div>
                 <div><strong>Asunto:</strong> ${escapeHtml(item.email_subject || 'Sin asunto')}</div>
               </div>
-              <div class="pt-3 border-t border-slate-700/60 space-y-2.5">
+              <div class="divider stack">
                 <div>
-                  <label class="block text-xs font-medium text-slate-300 mb-1">Proveedor:</label>
-                  <input type="text" id="reviewSupplier_${item.id}" value="${escapeHtml(item.supplier)}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  <label class="field-label" for="reviewSupplier_${item.id}">Proveedor:</label>
+                  <input type="text" id="reviewSupplier_${item.id}" value="${escapeHtml(item.supplier)}" class="input">
                 </div>
                 <div>
-                  <label class="block text-xs font-medium text-slate-300 mb-1">Fecha de la factura:</label>
-                  <input type="date" id="reviewDate_${item.id}" value="${safeDate}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  <label class="field-label" for="reviewDate_${item.id}">Fecha de la factura:</label>
+                  <input type="date" id="reviewDate_${item.id}" value="${safeDate}" class="input">
                 </div>
               </div>
             </div>
-            <div class="pt-2 flex items-center space-x-3">
-              <button onclick="rejectReviewed('${item.id}')" class="flex-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-medium py-2.5 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5" title="No volverá a aparecer este formato de documento de este remitente">
+            <div class="actions-row">
+              <button onclick="rejectReviewed('${item.id}')" class="btn btn-danger btn-lg btn-flex" title="No volverá a aparecer este formato de documento de este remitente">
                 <i class="fa-solid fa-trash-can"></i>
                 <span>No es factura</span>
               </button>
-              <button onclick="acceptReviewed('${item.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-3 rounded-xl text-xs shadow-md shadow-emerald-600/30 transition flex items-center justify-center gap-1.5">
+              <button onclick="acceptReviewed('${item.id}')" class="btn btn-ok btn-lg btn-flex">
                 <i class="fa-solid fa-box-archive"></i>
                 <span>Sí es factura: archivar</span>
               </button>
@@ -1087,7 +2146,7 @@
       }
     }
 
-    // Modal Anti-Misclick de Fecha
+    // Modal anti-misclick de fecha
     function promptConfirmDate(itemId, supplier, day, month, year, format, label) {
       const text = `¿Estás seguro de que la fecha correcta es <strong>${label}</strong> para el proveedor <strong>${escapeHtml(supplier)}</strong>?`;
       document.getElementById('modalConfirmationText').innerHTML = text;
@@ -1095,7 +2154,7 @@
       const btnConfirm = document.getElementById('btnModalConfirm');
       btnConfirm.onclick = async () => {
         btnConfirm.disabled = true;
-        btnConfirm.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Guardando...';
+        btnConfirm.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
 
         try {
           const res = await fetch(`/api/resolve_ambiguity/${itemId}`, {
@@ -1111,25 +2170,25 @@
           alert('Error al resolver ambigüedad.');
         } finally {
           btnConfirm.disabled = false;
-          btnConfirm.innerHTML = '<i class="fa-solid fa-check mr-1.5"></i> Confirmar y Guardar';
+          btnConfirm.innerHTML = '<i class="fa-solid fa-check"></i> Confirmar y Guardar';
         }
       };
 
-      document.getElementById('modalAntiMisclick').classList.remove('hidden');
+      openModal('modalAntiMisclick');
     }
 
     function closeModalAntiMisclick() {
-      document.getElementById('modalAntiMisclick').classList.add('hidden');
+      closeModal('modalAntiMisclick');
     }
 
-    // Modal de Descarte para Facturas Dudosas
+    // Modal de descarte para facturas dudosas
     function promptDiscardAmbiguous(itemId, supplier) {
       document.getElementById('modalDiscardText').innerHTML = `¿Estás seguro de que deseas descartar el documento de <strong>${escapeHtml(supplier)}</strong>? Su copia provisional irá a la papelera de Drive y el documento pasará a Descartadas.`;
 
       const btnConfirm = document.getElementById('btnModalConfirmDiscard');
       btnConfirm.onclick = async () => {
         btnConfirm.disabled = true;
-        btnConfirm.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Descartando...';
+        btnConfirm.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Descartando...';
 
         try {
           const res = await fetch(`/api/discard_ambiguous/${itemId}`, { method: 'POST' });
@@ -1144,15 +2203,15 @@
           alert('Error al descartar documento.');
         } finally {
           btnConfirm.disabled = false;
-          btnConfirm.innerHTML = '<i class="fa-solid fa-trash-can mr-1.5"></i> Confirmar Descarte';
+          btnConfirm.innerHTML = '<i class="fa-solid fa-trash-can"></i> Confirmar Descarte';
         }
       };
 
-      document.getElementById('modalConfirmDiscard').classList.remove('hidden');
+      openModal('modalConfirmDiscard');
     }
 
     function closeModalDiscard() {
-      document.getElementById('modalConfirmDiscard').classList.add('hidden');
+      closeModal('modalConfirmDiscard');
     }
 
     function submitManualDate(itemId, supplier) {
@@ -1169,10 +2228,10 @@
       promptConfirmDate(itemId, supplier, d, m, y, 'DD/MM/YYYY', label);
     }
 
-    // ── Carga de Facturas Descartadas (Rescate o Retirada de Lista) ──────────
+    // ── Carga de Facturas Descartadas (rescate o retirada de la lista) ──────
     async function loadDiscarded() {
       const container = document.getElementById('discardedList');
-      container.innerHTML = '<div class="text-slate-400 text-sm py-4">Cargando facturas descartadas...</div>';
+      container.innerHTML = '<div class="loading">Cargando facturas descartadas...</div>';
 
       try {
         const res = await fetch('/api/discarded');
@@ -1180,77 +2239,70 @@
 
         if (items.length === 0) {
           container.innerHTML = `
-            <div class="bg-slate-800/40 border border-slate-700/40 rounded-xl p-8 text-center space-y-2">
-              <div class="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl mx-auto">
-                <i class="fa-solid fa-shield-check"></i>
-              </div>
-              <h3 class="text-base font-semibold text-white">No hay documentos pendientes de revisar</h3>
-              <p class="text-xs text-slate-400">Todos los correos analizados correspondían a facturas válidas o ya han sido confirmados como descartados.</p>
+            <div class="empty empty-card">
+              <div class="empty-ico c-ok"><i class="fa-solid fa-shield-halved"></i></div>
+              <h3>No hay documentos pendientes de revisar</h3>
+              <p>Todos los correos analizados correspondían a facturas válidas o ya han sido confirmados como descartados.</p>
             </div>
           `;
+          animateIn(container.firstElementChild);
           return;
         }
 
         container.innerHTML = items.map(item => `
-          <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 grid grid-cols-1 lg:grid-cols-2 gap-6 shadow-md">
-            <!-- Visor -->
-            <div class="h-96 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 flex flex-col">
-              <div class="bg-slate-800 px-3 py-1.5 border-b border-slate-700 text-xs font-semibold text-slate-300 flex items-center justify-between">
-                <span class="truncate">${escapeHtml(item.filename)}</span>
-                <a href="/api/preview/${item.id}" target="_blank" class="text-indigo-400 hover:underline">Abrir pestaña <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>
-              </div>
-              <iframe src="/api/preview/${item.id}#toolbar=0" class="w-full flex-1 border-0"></iframe>
-            </div>
+          <div class="review">
+            ${viewerHtml(item)}
 
-            <!-- Diagnóstico, Retirada y Rescate -->
-            <div class="flex flex-col justify-between space-y-4">
-              <div class="space-y-3">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <i class="fa-solid fa-ban"></i> Descartado por el Modelo
-                  </span>
-                  <span class="text-xs text-slate-400">${item.created_at ? item.created_at.replace('T', ' ') : ''}</span>
+            <!-- Diagnóstico, retirada y rescate -->
+            <div class="review-side">
+              <div class="review-top">
+                <div class="review-meta">
+                  <span class="tag tag-danger">Descartado por el Modelo</span>
+                  <span class="t-time">${item.created_at ? item.created_at.replace('T', ' ') : ''}</span>
                 </div>
 
-                <div class="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3 text-xs text-rose-300">
-                  <strong class="font-semibold block mb-1">Motivo del descarte:</strong>
-                  ${escapeHtml(item.reason || 'Documento no identificado como factura fiscal válida')}
+                <div class="note note-danger">
+                  <i class="fa-solid fa-ban"></i>
+                  <div>
+                    <span class="note-title">Motivo del descarte:</span>
+                    ${escapeHtml(item.reason || 'Documento no identificado como factura fiscal válida')}
+                  </div>
                 </div>
 
-                <div class="text-xs text-slate-400 space-y-1">
+                <div class="kv">
                   <div><strong>Remitente:</strong> ${escapeHtml(item.sender || 'Desconocido')}</div>
                   <div><strong>Asunto:</strong> ${escapeHtml(item.email_subject || 'Sin asunto')}</div>
                 </div>
 
-                <!-- Formulario de Rescate con Motivo de Usuario -->
-                <div class="pt-3 border-t border-slate-700/60 space-y-2.5">
-                  <div class="text-xs font-bold text-white uppercase tracking-wide">Acción de Rescate Manual</div>
+                <!-- Formulario de rescate con motivo del usuario -->
+                <div class="divider stack">
+                  <div class="section-label">Acción de Rescate Manual</div>
                   <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Asignar Proveedor:</label>
-                    <input type="text" id="rescueSupplier_${item.id}" value="${escapeHtml(item.supplier !== 'DESCONOCIDO' && !item.supplier.includes('@') ? item.supplier : '')}" placeholder="Nombre del proveedor (ej. CARREFOUR)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    <label class="field-label" for="rescueSupplier_${item.id}">Asignar Proveedor:</label>
+                    <input type="text" id="rescueSupplier_${item.id}" value="${escapeHtml(item.supplier !== 'DESCONOCIDO' && !item.supplier.includes('@') ? item.supplier : '')}" placeholder="Nombre del proveedor (ej. CARREFOUR)" class="input">
                   </div>
                   <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Fecha de Factura:</label>
-                    <input type="date" id="rescueDate_${item.id}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    <label class="field-label" for="rescueDate_${item.id}">Fecha de Factura:</label>
+                    <input type="date" id="rescueDate_${item.id}" class="input">
                   </div>
                   <div>
-                    <label class="block text-xs font-medium text-slate-300 mb-1">Motivo del rescate o pista para el sistema (opcional):</label>
-                    <textarea id="rescueReason_${item.id}" rows="2" placeholder="Ej: Es un ticket de compra válido, el CIF aparece al pie del documento." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"></textarea>
+                    <label class="field-label" for="rescueReason_${item.id}">Motivo del rescate o pista para el sistema (opcional):</label>
+                    <textarea id="rescueReason_${item.id}" rows="2" placeholder="Ej: Es un ticket de compra válido, el CIF aparece al pie del documento." class="textarea"></textarea>
                   </div>
-                  <div class="text-[11px] text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2 flex items-center gap-1.5">
-                    <i class="fa-solid fa-brain text-emerald-400"></i>
+                  <div class="note note-ok">
+                    <i class="fa-solid fa-brain"></i>
                     <span>Al marcar como válida, el sistema memorizará automáticamente al proveedor para aceptarlo en el futuro.</span>
                   </div>
                 </div>
               </div>
 
-              <!-- Botones de Acción: Confirmar Descarte vs Rescatar -->
-              <div class="pt-2 flex items-center space-x-3">
-                <button onclick="dismissDiscarded('${item.id}', ${jsArg(item.filename)})" class="flex-1 bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white font-medium py-2.5 px-3 rounded-xl text-xs transition border border-slate-600 flex items-center justify-center gap-1.5 shadow-sm" title="Dar la razón al sistema y retirar este documento de la lista de revisión">
-                  <i class="fa-solid fa-check-double text-slate-400"></i>
+              <!-- Botones: confirmar descarte o rescatar -->
+              <div class="actions-row">
+                <button onclick="dismissDiscarded('${item.id}', ${jsArg(item.filename)})" class="btn btn-ghost btn-lg btn-flex" title="Dar la razón al sistema y retirar este documento de la lista de revisión">
+                  <i class="fa-solid fa-check-double c-soft"></i>
                   <span>Confirmar Descarte</span>
                 </button>
-                <button onclick="rescueInvoice('${item.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 px-3 rounded-xl text-xs shadow-md shadow-emerald-600/30 transition flex items-center justify-center gap-1.5">
+                <button onclick="rescueInvoice('${item.id}')" class="btn btn-ok btn-lg btn-flex">
                   <i class="fa-solid fa-box-archive"></i>
                   <span>Marcar como Válida</span>
                 </button>
@@ -1258,9 +2310,10 @@
             </div>
           </div>
         `).join('');
+        staggerIn(container, { max: 4, step: 60 });
 
       } catch (e) {
-        container.innerHTML = '<div class="text-rose-400 text-sm">Error cargando facturas descartadas.</div>';
+        container.innerHTML = '<div class="error-text">Error cargando facturas descartadas.</div>';
       }
     }
 
@@ -1317,7 +2370,7 @@
       }
     }
 
-    // ── Carga de Historial de Éxito con Filtros y Ordenación ───────────────
+    // ── Historial de éxito con filtros y ordenación ─────────────────────────
     let historyRawItems = [];
     let historySortCol = 'date_str';
     let historySortAsc = false; // Más recientes primero por defecto
@@ -1348,38 +2401,48 @@
       return `${name} ${year} (${mStr})`;
     }
 
+    // Igual que formatMonthLabel, con el código del mes en tipografía de datos
+    function formatMonthCell(mStr) {
+      if (!mStr || !mStr.includes('-')) return escapeHtml(mStr || '-');
+      const [mm, yy] = mStr.split('-');
+      const name = SPANISH_MONTHS[mm] || mm;
+      const year = yy.length === 2 ? `20${yy}` : yy;
+      return `${escapeHtml(name)} ${escapeHtml(year)}<small>(${escapeHtml(mStr)})</small>`;
+    }
+
     async function loadHistory() {
       const tbody = document.getElementById('historyTableBody');
-      tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-slate-400 text-center">Cargando historial de facturas...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6"><div class="loading" style="justify-content:center">Cargando historial de facturas...</div></td></tr>';
 
       try {
         const res = await fetch('/api/history?limit=5000');
         historyRawItems = await res.json();
 
-        // Actualizar opciones del selector de proveedores
+        // Opciones del selector de proveedores
         const suppSelect = document.getElementById('historySupplierFilter');
         if (suppSelect) {
           const prevSupp = suppSelect.value;
           const suppliers = Array.from(new Set(historyRawItems.map(i => i.supplier).filter(Boolean))).sort();
-          suppSelect.innerHTML = '<option value="">🏢 Todos los proveedores (' + suppliers.length + ')</option>' +
+          suppSelect.innerHTML = '<option value="">Todos los proveedores (' + suppliers.length + ')</option>' +
             suppliers.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
           if (suppliers.includes(prevSupp)) suppSelect.value = prevSupp;
         }
 
-        // Actualizar opciones del selector de meses (ordenados de más recientes a más antiguos)
+        // Opciones del selector de meses (de más recientes a más antiguos)
         const monthSelect = document.getElementById('historyMonthFilter');
         if (monthSelect) {
           const prevMonth = monthSelect.value;
           const months = Array.from(new Set(historyRawItems.map(i => i.date_str).filter(Boolean)))
             .sort((a, b) => parseMonthYearSortKey(b) - parseMonthYearSortKey(a));
-          monthSelect.innerHTML = '<option value="">📅 Todos los meses (' + months.length + ')</option>' +
+          monthSelect.innerHTML = '<option value="">Todos los meses (' + months.length + ')</option>' +
             months.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(formatMonthLabel(m))}</option>`).join('');
           if (months.includes(prevMonth)) monthSelect.value = prevMonth;
         }
 
         applyHistoryFiltersAndRender();
+        staggerIn(tbody, { max: 14, step: 25, y: 6 });
       } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-4 text-rose-400 text-center">Error al cargar historial.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="error-text" style="text-align:center">Error al cargar historial.</td></tr>';
       }
     }
 
@@ -1446,7 +2509,7 @@
         }
       });
 
-      // 3. Actualizar textos de contadores
+      // 3. Contadores
       if (countBadge) {
         countBadge.textContent = `${historyRawItems.length} facturas`;
       }
@@ -1454,33 +2517,35 @@
         if (filtered.length === historyRawItems.length) {
           resultText.textContent = `Mostrando todas las ${filtered.length} facturas registradas.`;
         } else {
-          resultText.innerHTML = `Mostrando <strong>${filtered.length}</strong> de ${historyRawItems.length} facturas filtradas.`;
+          resultText.innerHTML = `Mostrando <strong style="color: var(--ink)">${filtered.length}</strong> de ${historyRawItems.length} facturas filtradas.`;
         }
       }
 
-      // 4. Actualizar iconos de cabeceras
+      // 4. Iconos de las cabeceras
       ['date_str', 'supplier', 'amount', 'filename', 'drive_folder_path', 'created_at'].forEach(col => {
         const iconEl = document.getElementById(`sortIcon_history_${col}`);
         if (!iconEl) return;
         if (historySortCol === col) {
-          iconEl.className = 'text-[11px] text-indigo-400 font-bold';
+          iconEl.className = 'sort-ico is-on';
           iconEl.innerHTML = historySortAsc
             ? '<i class="fa-solid fa-arrow-up-short-wide"></i>'
             : '<i class="fa-solid fa-arrow-down-wide-short"></i>';
         } else {
-          iconEl.className = 'text-[11px] text-slate-600';
+          iconEl.className = 'sort-ico';
           iconEl.innerHTML = '<i class="fa-solid fa-sort"></i>';
         }
       });
 
-      // 5. Renderizar filas
+      // 5. Filas
       if (filtered.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="6" class="px-4 py-8 text-center text-slate-400 space-y-2">
-              <i class="fa-solid fa-filter-circle-xmark text-2xl text-slate-500"></i>
-              <div class="text-sm font-medium text-slate-300">No se encontraron facturas que coincidan con la búsqueda.</div>
-              <div class="text-xs text-slate-500">Prueba a seleccionar otro mes, proveedor o pulsa 'Limpiar filtros'.</div>
+            <td colspan="6">
+              <div class="empty" style="padding: 32px 16px;">
+                <div class="empty-ico c-soft"><i class="fa-solid fa-filter-circle-xmark"></i></div>
+                <div style="font-size: 14px; font-weight: 500; color: var(--ink);">No se encontraron facturas que coincidan con la búsqueda.</div>
+                <p>Prueba a seleccionar otro mes, proveedor o pulsa 'Limpiar filtros'.</p>
+              </div>
             </td>
           </tr>
         `;
@@ -1488,33 +2553,33 @@
       }
 
       tbody.innerHTML = filtered.map(item => `
-        <tr class="hover:bg-slate-800/50 transition">
-          <td class="px-4 py-3 font-semibold text-indigo-300 whitespace-nowrap">
-            ${escapeHtml(formatMonthLabel(item.date_str))}
+        <tr>
+          <td class="t-month">
+            ${formatMonthCell(item.date_str)}
           </td>
-          <td class="px-4 py-3 font-bold text-white">
+          <td class="td-strong">
             ${escapeHtml(item.supplier)}
           </td>
-          <td class="px-4 py-3 text-sm font-semibold text-amber-300 whitespace-nowrap text-right">
+          <td class="td-amount">
             ${fmtAmount(item.amount)}
           </td>
-          <td class="px-4 py-3 text-xs text-slate-300 font-mono max-w-xs truncate" title="${escapeHtml(item.filename)}">
-            ${escapeHtml(item.filename)}
+          <td class="td-file" title="${escapeHtml(item.filename)}">
+            <div class="file-name truncate">${escapeHtml(item.filename)}</div>
           </td>
-          <td class="px-4 py-3 text-xs font-mono text-emerald-400 font-medium">
-            <i class="fa-regular fa-folder mr-1"></i> ${escapeHtml(item.drive_folder_path || '-')}
+          <td>
+            <span class="path c-ok"><i class="fa-regular fa-folder"></i> ${escapeHtml(item.drive_folder_path || '-')}</span>
           </td>
-          <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+          <td class="t-time">
             ${item.created_at ? item.created_at.replace('T', ' ').slice(0, 16) : '-'}
           </td>
         </tr>
       `).join('');
     }
 
-    // ── Carga de Reglas Aprendidas ──────────────────────────────────────────
+    // ── Reglas aprendidas ───────────────────────────────────────────────────
     async function loadRules() {
       const container = document.getElementById('rulesList');
-      container.innerHTML = '<div class="text-slate-400 text-sm py-4">Cargando reglas memorizadas...</div>';
+      container.innerHTML = '<div class="loading">Cargando reglas memorizadas...</div>';
 
       try {
         const res = await fetch('/api/rules');
@@ -1523,76 +2588,76 @@
         const keys = Object.keys(rules);
         const formats = await fetch('/api/rejected_formats').then(r => r.json());
         const formatsHtml = formats.map(f => `
-          <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-3 shadow-sm">
-            <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
-              <h4 class="font-bold text-white text-sm flex items-center gap-2">
-                <i class="fa-solid fa-ban text-rose-400 text-sm"></i>
-                No es factura: ${escapeHtml(f.origin_document || f.format)}
+          <div class="rule-card">
+            <div class="rule-head">
+              <h4 class="rule-name small">
+                <i class="fa-solid fa-ban c-danger"></i>
+                <span>No es factura: <span class="mono" style="font-weight:500">${escapeHtml(f.origin_document || f.format)}</span></span>
               </h4>
-              <button onclick="forgetRejectedFormat('${f.id}')" class="text-rose-400 hover:text-rose-300 text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition shrink-0">
+              <button onclick="forgetRejectedFormat('${f.id}')" class="btn btn-danger btn-sm">
                 <i class="fa-solid fa-trash-can"></i> Olvidar
               </button>
             </div>
-            <p class="text-xs text-slate-300">Si un documento con este formato de <strong>${escapeHtml(f.sender)}</strong> vuelve a llegar sin pasar la validación, se ignora sin mostrártelo.</p>
+            <p style="font-size: 12.5px; color: var(--muted);">Si un documento con este formato de <strong style="color: var(--ink)">${escapeHtml(f.sender)}</strong> vuelve a llegar sin pasar la validación, se ignora sin mostrártelo.</p>
           </div>
         `).join('');
 
         if (keys.length === 0 && formats.length === 0) {
           container.innerHTML = `
-            <div class="col-span-2 bg-slate-800/40 border border-slate-700/40 rounded-xl p-8 text-center space-y-2">
-              <div class="w-12 h-12 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xl mx-auto">
-                <i class="fa-solid fa-brain"></i>
-              </div>
-              <h3 class="text-base font-semibold text-white">No hay reglas aprendidas todavía</h3>
-              <p class="text-xs text-slate-400">A medida que confirmes fechas en 'Facturas Dudosas' o rescates facturas descartadas, el sistema memorizará aquí sus formatos y motivos automáticamente.</p>
+            <div class="empty empty-card" style="grid-column: 1 / -1;">
+              <div class="empty-ico c-accent"><i class="fa-solid fa-brain"></i></div>
+              <h3>No hay reglas aprendidas todavía</h3>
+              <p>A medida que confirmes fechas en 'Facturas Dudosas' o rescates facturas descartadas, el sistema memorizará aquí sus formatos y motivos automáticamente.</p>
             </div>
           `;
+          animateIn(container.firstElementChild);
           return;
         }
 
         container.innerHTML = keys.map(key => {
           const rule = rules[key];
           return `
-            <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-5 space-y-4 shadow-sm">
-              <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
-                <div>
-                  <h4 class="font-bold text-white text-base flex items-center gap-2">
-                    <i class="fa-solid fa-building text-indigo-400 text-sm"></i>
+            <div class="rule-card">
+              <div class="rule-head">
+                <div style="min-width:0">
+                  <h4 class="rule-name">
+                    <i class="fa-solid fa-building"></i>
                     ${escapeHtml(rule.display_name || key)}
                   </h4>
-                  <span class="text-[11px] text-slate-400">Memorizada: ${rule.created_at ? rule.created_at.replace('T', ' ') : '-'}</span>
+                  <span class="rule-date">Memorizada: ${rule.created_at ? rule.created_at.replace('T', ' ') : '-'}</span>
                 </div>
-                <button onclick="deleteRule('${key}')" class="text-rose-400 hover:text-rose-300 text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition flex items-center gap-1">
+                <button onclick="deleteRule(${jsArg(key)})" class="btn btn-danger btn-sm">
                   <i class="fa-solid fa-trash-can"></i> Olvidar Regla
                 </button>
               </div>
 
               <!-- ¿Por qué se aprendió? -->
-              <div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/40 space-y-1">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+              <div class="rule-block">
+                <div class="rule-block-title c-warn">
                   <i class="fa-solid fa-lightbulb"></i> ¿Por qué se memorizó esta regla?
                 </div>
-                <p class="text-xs text-slate-300">
+                <p>
                   ${escapeHtml(rule.human_explanation || rule.notes || 'Configuración guardada por el usuario.')}
                 </p>
               </div>
 
               <!-- ¿Qué hace en futuras ejecuciones? -->
-              <div class="bg-slate-900/60 rounded-lg p-3 border border-slate-700/40 space-y-1.5">
-                <div class="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <div class="rule-block">
+                <div class="rule-block-title c-ok">
                   <i class="fa-solid fa-bolt"></i> Comportamiento a partir de ahora
                 </div>
-                <ul class="text-xs text-slate-300 space-y-1 list-disc list-inside">
-                  <li><strong>Formato de fecha:</strong> Si una factura contiene fechas ambiguas (ej. 05/08), se aplicará automáticamente <span class="text-indigo-300 font-semibold">${rule.date_format || 'DD/MM/YYYY'}</span> sin preguntarte.</li>
-                  <li><strong>Aceptación:</strong> ${rule.always_accept ? '<span class="text-emerald-300 font-semibold">Aceptación forzada activa</span> (los documentos se archivarán en Drive sin ser descartados por filtros fiscales).' : 'Aplica validación fiscal estándar.'}</li>
+                <ul>
+                  <li><strong>Formato de fecha:</strong> Si una factura contiene fechas ambiguas (ej. 05/08), se aplicará automáticamente <span class="hl">${escapeHtml(rule.date_format || 'DD/MM/YYYY')}</span> sin preguntarte.</li>
+                  <li><strong>Aceptación:</strong> ${rule.always_accept ? '<span class="hl-ok">Aceptación forzada activa</span> (los documentos se archivarán en Drive sin ser descartados por filtros fiscales).' : 'Aplica validación fiscal estándar.'}</li>
                 </ul>
               </div>
             </div>
           `;
         }).join('') + formatsHtml;
+        staggerIn(container, { max: 8, step: 45 });
 
       } catch (e) {
-        container.innerHTML = '<div class="text-rose-400 text-sm">Error cargando reglas.</div>';
+        container.innerHTML = '<div class="error-text">Error cargando reglas.</div>';
       }
     }
 
@@ -1609,7 +2674,7 @@
     async function deleteRule(supplierKey) {
       if (!confirm(`¿Deseas olvidar la regla aprendida para ${supplierKey}? El sistema volverá a pedir confirmación para sus documentos.`)) return;
       try {
-        await fetch(`/api/rules/${supplierKey}`, { method: 'DELETE' });
+        await fetch(`/api/rules/${encodeURIComponent(supplierKey)}`, { method: 'DELETE' });
         loadRules();
         pollStatus();
       } catch (e) {
@@ -1641,10 +2706,10 @@
       const lastRunText = document.getElementById('activeSchedLastRunText');
 
       if (s && s.enabled) {
-        badge.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5';
-        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Activa';
+        badge.className = 'tag tag-ok tag-live';
+        badge.textContent = 'Activa';
       } else {
-        badge.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-400';
+        badge.className = 'tag';
         badge.textContent = 'Inactiva';
       }
 
@@ -1662,17 +2727,26 @@
         document.getElementById('schedDayOfMonth').value = s.day_of_month ?? 1;
         document.getElementById('schedHour').value = s.hour ?? 9;
         document.getElementById('schedMinute').value = s.minute ?? 0;
-        toggleFrequencyFields();
+        toggleFrequencyFields(true);
         renderActiveScheduleCard(s);
       } catch (e) {
         console.error('Error al cargar programador:', e);
       }
     }
 
-    function toggleFrequencyFields() {
+    function toggleFrequencyFields(silent) {
       const freq = document.getElementById('schedFreq').value;
-      document.getElementById('fieldWeekly').classList.toggle('hidden', freq !== 'weekly');
-      document.getElementById('fieldMonthly').classList.toggle('hidden', freq !== 'monthly');
+      const weekly = document.getElementById('fieldWeekly');
+      const monthly = document.getElementById('fieldMonthly');
+      const showWeekly = freq === 'weekly';
+      const showMonthly = freq === 'monthly';
+      const appear = (el, show) => {
+        const wasHidden = el.classList.contains('hidden');
+        el.classList.toggle('hidden', !show);
+        if (show && wasHidden && silent !== true) animateIn(el, { y: -4, duration: 300 });
+      };
+      appear(weekly, showWeekly);
+      appear(monthly, showMonthly);
     }
 
     async function saveSchedule() {
