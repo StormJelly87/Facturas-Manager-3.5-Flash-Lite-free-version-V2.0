@@ -233,15 +233,23 @@ def resolve_ambiguity(item_id: str, req: AmbiguityResolutionRequest):
         if drive_file_id and old_folder_id:
             if new_supplier_id != old_folder_id:
                 # Mover el archivo entre carpetas en Drive sin duplicar
-                invoice_manager.move_drive_file(drive_service, drive_file_id, old_folder_id, new_supplier_id)
+                if not invoice_manager.move_drive_file(drive_service, drive_file_id, old_folder_id, new_supplier_id):
+                    raise RuntimeError("no se pudo mover el archivo a la carpeta del mes elegido")
         else:
             # Si aún no estaba en Drive, subir desde cuarentena
             filepath = data_manager.get_quarantine_path(item_id)
-            if filepath and os.path.exists(filepath):
-                drive_file_id = invoice_manager.upload_to_drive(drive_service, filepath, new_supplier_id)
+            if not filepath or not os.path.exists(filepath):
+                raise RuntimeError("no se encuentra el documento para subirlo")
+            drive_file_id = invoice_manager.upload_to_drive(drive_service, filepath, new_supplier_id)
+            if not drive_file_id:
+                raise RuntimeError("no se pudo subir el documento")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error en Google Drive: {e}")
+        # No se toca el historial ni se aprende la regla: la factura sigue en Dudosas
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en Google Drive: {e}. La factura sigue en Dudosas; vuelve a intentarlo.",
+        )
 
     # Guardar regla en vendor_rules.json con origen y explicación detallada
     data_manager.save_vendor_rule(
@@ -256,6 +264,7 @@ def resolve_ambiguity(item_id: str, req: AmbiguityResolutionRequest):
     data_manager.update_history_entry(item_id, {
         "status": "SUCCESS",
         "date_str": month_folder,
+        "drive_file_id": drive_file_id,
         "drive_folder_id": new_supplier_id,
         "drive_folder_path": f"{year_folder} / {month_folder} / {supplier_name}",
         "reason": f"Fecha confirmada ({req.day:02d}/{req.month:02d}/{req.year}) - Formato {req.format}",

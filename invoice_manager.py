@@ -1425,6 +1425,19 @@ def _normalize_name(name: str) -> str:
     return name
 
 
+# Palabras que muchos proveedores distintos llevan al principio del nombre:
+# no sirven para decidir que dos nombres son la misma empresa.
+_GENERIC_SUPPLIER_WORDS = {
+    "GRUPO", "GRUP", "DISTRIBUCIONES", "DISTRIBUCIONS", "DISTRIBUIDORA", "SUPERMERCADOS",
+    "SUPERMERCAT", "SUPERMERCATS", "COMERCIAL", "SERVICIOS", "SERVEIS", "TALLERES", "TALLERS",
+    "HERMANOS", "GERMANS", "FARMACIA", "CENTRO", "CENTRE", "INDUSTRIAS", "INDUSTRIAL",
+    "SUMINISTROS", "SUBMINISTRAMENTS", "TRANSPORTES", "TRANSPORTS", "CONSTRUCCIONES",
+    "INVERSIONES", "GESTORIA", "GESTIO", "GESTION", "ASESORIA", "CLINICA", "LABORATORIOS",
+    "PAPELERIA", "FERRETERIA", "FRUITES", "FRUTAS", "CARNICERIA", "PANADERIA", "AUTOSERVICIO",
+    "IMPORT", "EXPORT", "INTERNACIONAL", "INTERNATIONAL", "ESPANA", "IBERICA", "GLOBAL",
+}
+
+
 def get_or_create_supplier_folder(service, supplier_name: str, parent_id: str) -> str:
     """
     Busca una carpeta de proveedor con match inteligente dentro de `parent_id`.
@@ -1433,8 +1446,8 @@ def get_or_create_supplier_folder(service, supplier_name: str, parent_id: str) -
 
     Estrategia (en orden de prioridad):
       1. Match EXACTO normalizado.
-      2. Match PARCIAL: nombre normalizado contenido en el otro.
-      3. Match por PALABRA CLAVE (>= 3 chars) normalizada.
+      2. Match PARCIAL: un nombre contenido entero en el otro, por palabras completas.
+      3. Match por MARCA: misma primera palabra (>= 4 letras y no genérica).
 
     Si no hay match, crea una carpeta nueva en MAYUSCULAS.
     """
@@ -1481,20 +1494,24 @@ def get_or_create_supplier_folder(service, supplier_name: str, parent_id: str) -
             log(f"  [DRIVE] Proveedor match EXACTO: '{folder['name']}' con ID {folder['id']}")
             return folder["id"]
 
-    # 2. Match parcial normalizado (contenido)
+    # 2. Match parcial por palabras completas: un nombre contiene al otro entero
+    #    ("CAPRABO" ↔ "CAPRABO EXPRESS"), nunca un trozo de palabra ("MVA" ≠ "MVAX").
+    padded_supplier = f" {supplier_norm} "
     for folder, fn in normed:
-        if fn and supplier_norm and (fn in supplier_norm or supplier_norm in fn):
+        if fn and supplier_norm and (f" {fn} " in padded_supplier or padded_supplier in f" {fn} "):
             log(f"  [DRIVE] Proveedor match PARCIAL: '{folder['name']}' con ID {folder['id']}")
             return folder["id"]
 
-    # 3. Match por palabra clave normalizada
-    supplier_words = {w for w in supplier_norm.split() if len(w) >= 3}
-    for folder, fn in normed:
-        folder_words = {w for w in fn.split() if len(w) >= 3}
-        common = supplier_words & folder_words
-        if common:
-            log(f"  [DRIVE] Proveedor match PALABRA {common}: '{folder['name']}' con ID {folder['id']}")
-            return folder["id"]
+    # 3. Match por marca: la PRIMERA palabra de los dos nombres es la misma
+    #    ("ORONA S. COOP." ↔ "ORONA-GALO"). Una palabra genérica compartida no basta:
+    #    "ALDI ... SUPERMERCADOS" acabó en la carpeta de "LIDL SUPERMERCADOS" (E7).
+    supplier_first = supplier_norm.split()[0] if supplier_norm else ""
+    if len(supplier_first) >= 4 and supplier_first not in _GENERIC_SUPPLIER_WORDS:
+        for folder, fn in normed:
+            folder_first = fn.split()[0] if fn else ""
+            if folder_first == supplier_first:
+                log(f"  [DRIVE] Proveedor match MARCA '{supplier_first}': '{folder['name']}' con ID {folder['id']}")
+                return folder["id"]
 
     # Sin match -> crear nueva en MAYUSCULAS
     log(f"  [DRIVE] Proveedor '{supplier_upper}' no encontrado, creando nueva...")
